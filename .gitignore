@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Data: never commit raw or derived tracking data
+data/raw/*
+data/processed/*
+!data/**/.gitkeep
+
+# Web
+web/node_modules/
+web/dist/
+web/public/data/*
+!web/public/data/sample_frame.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

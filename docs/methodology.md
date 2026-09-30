@@ -1,0 +1,92 @@
+# Methodology
+
+Working notes on how Expected Space (xSpace) is computed, what it assumes, and what's next.
+Parameters live in `PhysicsParams` (`src/xspace/physics/pitch_control.py`).
+
+## 1. Preprocessing
+
+- Any kloppy provider is converted to the Second Spectrum coordinate system (metres, centre spot at
+  the origin) with the home team attacking +x for the whole match.
+- Per frame, everything is rotated so the **team in possession attacks +x**.
+- Velocities: Savitzky–Golay derivative (0.28 s window, order 2), per period, speeds clipped at
+  12 m/s. Gaps (substitutions) are interpolated for filtering, then re-masked.
+- v0 assumes a 105 × 68 m pitch for every stadium.
+
+## 2. Time to intercept
+
+Shared by every component, and the same quantity Pressing Intensity is built on. A player keeps
+moving on their current velocity for a reaction time (0.7 s), then runs straight at 5 m/s:
+
+```
+r_react = r + v · t_react
+T(player → target) = t_react + |target − r_react| / v_max
+```
+
+## 3. Pitch control
+
+Spearman (2018), following Shaw's implementation, vectorised over all cells at once. A player's
+probability of having arrived by time *t* is logistic in `t − T` (σ = 0.45 s). Control accumulates
+from the moment the ball arrives (ground pass at 15 m/s) at rate λ = 4.3 s⁻¹ (×3 for the
+defending goalkeeper) until attack + defence control ≥ 0.99, then is normalised to sum to 1.
+
+Per-player control shares are kept, for attributing space to runners later.
+
+## 4. Pass reachability
+
+For each cell, sample 12 points along the straight passing lane. At each point, each defender
+intercepts with logistic probability in `(ball arrival time − defender T)`. Combined over all
+defenders and points like Pressing Intensity combines pressers:
+
+```
+P(blocked) = 1 − ∏ (1 − p_intercept)
+reach      = 1 − P(blocked)
+```
+
+## 5. Value
+
+`xT_gained(cell) = max(xT(cell) − xT(ball), 0)` using Karun Singh's public 12 × 8 xT grid,
+bilinearly interpolated. Using raw xT let the large, safe, low-value area in a team's own half
+dominate every total; measuring the gain keeps the focus on space that advances the attack.
+
+## 6. Defensive shape and zones
+
+Outfield defenders are split into up to three lines at the largest gaps in x, with at least two
+players per line (so a lone defender tracking a runner deep isn't mistaken for the back line).
+Line positions are medians.
+
+| Zone | Rule |
+|---|---|
+| behind | x > back line |
+| between | mid line < x ≤ back line, inside the block's width |
+| wide | mid line < x ≤ back line, outside the block's width |
+| in front | x ≤ mid line |
+
+The legal offside line (second-deepest defender, incl. GK; not behind halfway or the ball) is
+stored separately.
+
+## 7. Aggregation
+
+Frame totals are area-weighted sums (`Σ xSpace × cell area`, units xT·m²), overall and per zone,
+plus the single best cell.
+
+## Known limitations
+
+- **Independence**: defenders are treated as acting independently (same caveat as Pressing
+  Intensity). Real defences cover for each other.
+- **Ground passes only**: lofted balls over the line aren't modelled, which undercounts "behind"
+  space. Planned: a second, slower, higher trajectory that can't be intercepted mid-flight.
+- **Offside** is not yet applied to receivers.
+- **Fixed physical parameters** for every player; could be fit per player from tracking data.
+- **No validation yet** — see roadmap.
+
+## Roadmap
+
+1. **Match timeline** — compute every frame at 5 Hz across a match (parallelised; GPU later).
+2. **Exploited vs. available** — link to events: value actually gained by the next pass/carry,
+   and the *decision gap* (best reachable option − chosen option).
+3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
+   and xG in the next 10 s? Compare against plain pitch control and OBSO as baselines.
+4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).
+5. **PFF 2022 World Cup** — scale to 64 matches / 32 teams.
+6. **Own value model** — replace borrowed xT with a possession-value model fit on this data.
+7. **Web app** — match scrubber, team and player pages.

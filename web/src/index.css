@@ -1,0 +1,296 @@
+:root {
+  --bg: #f4f5f2;
+  --panel: #ffffff;
+  --text: #1b1f23;
+  --muted: #5d6670;
+  --border: #dde1e4;
+  --pitch: #16201a;
+  --pitch-line: rgba(255, 255, 255, 0.55);
+  --att: #e63946;
+  --def: #3a86c8;
+  --accent: #e76f24;
+  --sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  color-scheme: light dark;
+  font: 16px/1.5 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1214;
+    --panel: #161b1e;
+    --text: #e8ecee;
+    --muted: #97a2ab;
+    --border: #283036;
+    --pitch: #0f1713;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.brand {
+  color: var(--accent);
+}
+
+.tagline {
+  margin: 4px 0 24px;
+  color: var(--muted);
+}
+
+.error {
+  color: var(--att);
+}
+
+.viewer {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.viewer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.clock {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+.layer-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.layer-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.layer-tabs button small {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.layer-tabs button.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* The SVG viewBox has 2 m of padding on every side (109 x 72); the heatmap sits on the pitch. */
+.pitch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 109 / 72;
+  background: var(--pitch);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pitch svg,
+.heatmap {
+  position: absolute;
+}
+
+.pitch svg {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.heatmap {
+  left: calc(2 / 109 * 100%);
+  top: calc(2 / 72 * 100%);
+  width: calc(105 / 109 * 100%);
+  height: calc(68 / 72 * 100%);
+  image-rendering: auto;
+}
+
+.pitch-lines rect,
+.pitch-lines line,
+.pitch-lines circle {
+  fill: none;
+  stroke: var(--pitch-line);
+  stroke-width: 0.25;
+}
+
+.def-lines line {
+  stroke: #f1faee;
+  stroke-width: 0.25;
+  opacity: 0.8;
+}
+
+.def-lines .mid {
+  stroke-dasharray: 1.2 0.8;
+}
+
+.def-lines .offside {
+  stroke-dasharray: 0.3 0.6;
+}
+
+.players circle {
+  stroke: #fff;
+  stroke-width: 0.2;
+}
+
+.players.att circle {
+  fill: var(--att);
+}
+
+.players.def circle {
+  fill: var(--def);
+}
+
+.players text {
+  fill: #fff;
+  font-size: 1.1px;
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.players .velocity {
+  stroke: #fff;
+  stroke-width: 0.18;
+  opacity: 0.7;
+}
+
+.ball {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 0.2;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 10px 0 20px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.swatch.att {
+  background: var(--att);
+}
+
+.swatch.def {
+  background: var(--def);
+}
+
+.dash {
+  width: 18px;
+  border-top: 2px solid var(--muted);
+}
+
+.dash.mid {
+  border-top-style: dashed;
+}
+
+.dash.offside {
+  border-top-style: dotted;
+}
+
+.zones h2 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+.zones h2 small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.zone-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 56px;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.bar {
+  height: 10px;
+  background: var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.zone-val {
+  font-family: var(--mono);
+  text-align: right;
+}
+
+footer {
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .layer-tabs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .zone-row {
+    grid-template-columns: 110px 1fr 48px;
+  }
+}
