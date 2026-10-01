@@ -70,7 +70,8 @@ docs/        methodology and figures
 - **[IDSSE](https://doi.org/10.1038/s41597-025-04505-y)** — 7 Bundesliga / 2. Bundesliga matches,
   25 Hz optical tracking + events. Bassek, Rein, Weber et al. (2025), *Scientific Data*. CC BY 4.0.
 - **PFF FC 2022 World Cup** (Gradient Sports) — broadcast tracking (29.97 fps) + events for all 64
-  matches, free on request. Download with `uv run python scripts/download_pff.py --tracking all`.
+  matches, free via [Gradient Sports' request form](https://www.gradientsports.com/blog/enhanced-2022-world-cup-dataset).
+  Set `PFF_FOLDER_URL` to the link they send, then `uv run python scripts/download_pff.py --tracking all`.
   Not redistributed here; see Gradient Sports' terms.
 
 Raw and processed data are never committed.

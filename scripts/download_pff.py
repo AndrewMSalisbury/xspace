@@ -1,6 +1,9 @@
-"""Download the PFF FC (Gradient Sports) 2022 World Cup dataset from its public Drive folder.
+"""Download the PFF FC (Gradient Sports) 2022 World Cup dataset from its Drive folder.
 
-The data is free but not ours to redistribute — it lands in data/raw/pff/ (gitignored).
+The data is free but gated behind a request form at
+https://www.gradientsports.com/blog/enhanced-2022-world-cup-dataset — request access there, then
+put the Drive folder link you receive in the environment variable PFF_FOLDER_URL.
+Data lands in data/raw/pff/ (gitignored).
 
     uv run python scripts/download_pff.py                 # metadata, rosters, events, docs
     uv run python scripts/download_pff.py --tracking 3812 # + tracking for one match
@@ -10,12 +13,13 @@ The data is free but not ours to redistribute — it lands in data/raw/pff/ (git
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from pathlib import Path
 
 import gdown
 
-FOLDER_URL = "https://drive.google.com/drive/folders/1_a_q1e9CXeEPJ3GdCv_3-rNO3gPqacfa"
+FOLDER_URL_ENV = "PFF_FOLDER_URL"  # the Drive link Gradient Sports sends after their access form
 OUT = Path(__file__).resolve().parents[1] / "data" / "raw" / "pff"
 
 
@@ -39,7 +43,10 @@ def main() -> None:
                     help="match ids to download tracking for, or 'all' (~large)")
     args = ap.parse_args()
 
-    files = gdown.download_folder(FOLDER_URL, skip_download=True, quiet=True)
+    folder_url = os.environ.get(FOLDER_URL_ENV)
+    if not folder_url:
+        raise SystemExit(f"Set {FOLDER_URL_ENV} to the Drive folder link from Gradient Sports.")
+    files = gdown.download_folder(folder_url, skip_download=True, quiet=True)
     by_path = {f.path.replace("\\", "/"): f for f in files}
     latest_events = _latest_event_folder(list(by_path))
     want_all = "all" in args.tracking
