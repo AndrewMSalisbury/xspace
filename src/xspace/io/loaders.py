@@ -76,10 +76,20 @@ def _stack_xy(df, player_ids: list[str]) -> np.ndarray:
 
 
 def _fix_goalkeepers(team: Team, pos: np.ndarray, attacks_positive_x: bool) -> None:
-    """Some providers don't tag the GK; fall back to the player deepest on average."""
-    if team.gk_index is not None:
+    """Pick the GK who actually played the most; if none is tagged, the deepest player.
+
+    Squads list bench goalkeepers too, so the first 'GK' in the roster may never appear.
+    v0 uses one GK per team for the whole match (ignores GK substitutions).
+    """
+    presence = (~np.isnan(pos[:, :, 0])).sum(axis=0)
+    tagged = [i for i, code in enumerate(team.positions) if code == "GK" and presence[i] > 0]
+    if tagged:
+        team.gk_index = max(tagged, key=lambda i: presence[i])
         return
-    mean_x = np.nanmean(pos[:, :, 0], axis=0)
+    team.gk_index = None
+    if not presence.any():
+        return
+    mean_x = np.nanmean(np.where(presence > 0, pos[:, :, 0], np.nan), axis=0)
     if np.all(np.isnan(mean_x)):
         return
     team.gk_index = int(np.nanargmin(mean_x) if attacks_positive_x else np.nanargmax(mean_x))
@@ -155,6 +165,44 @@ def load_idsse(match_id: str = "J03WMX", limit: int | None = None,
     return match
 
 
+PFF_DIR = Path(__file__).resolve().parents[3] / "data" / "raw" / "pff"
+
+
+def load_pff(match_id: str | int, limit: int | None = None,
+             use_cache: bool = True) -> MatchTracking:
+    """Load a PFF FC 2022 World Cup match (download first with scripts/download_pff.py).
+
+    PFF tracking is broadcast-derived at ~30 fps; players off camera are estimated.
+    """
+    from kloppy import pff
+
+    match_id = str(match_id)
+    cache = CACHE_DIR / f"pff_{match_id}.pkl"
+    if use_cache and cache.exists():
+        with cache.open("rb") as f:
+            match = pickle.load(f)
+        return match if limit is None else _head(match, limit)
+
+    tracking = PFF_DIR / "Tracking Data" / f"{match_id}.jsonl.bz2"
+    if not tracking.exists():
+        raise FileNotFoundError(
+            f"{tracking} missing — run: uv run python scripts/download_pff.py --tracking {match_id}"
+        )
+    ds = pff.load_tracking(
+        meta_data=PFF_DIR / "Metadata" / f"{match_id}.json",
+        roster_meta_data=PFF_DIR / "Rosters" / f"{match_id}.json",
+        raw_data=tracking,
+        limit=limit,
+        only_alive=True,
+    )
+    match = from_kloppy(ds, match_id=match_id)
+    if use_cache and limit is None:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        with cache.open("wb") as f:
+            pickle.dump(match, f, protocol=pickle.HIGHEST_PROTOCOL)
+    return match
+
+
 def _head(match: MatchTracking, n: int) -> MatchTracking:
     arrays = {k: v[:n] for k, v in vars(match).items() if isinstance(v, np.ndarray)}
     return replace(match, **arrays)
@@ -169,3 +217,11 @@ IDSSE_MATCHES = {
     "J03WOY": "Fortuna Düsseldorf vs. F.C. Hansa Rostock",
     "J03WR9": "Fortuna Düsseldorf vs. 1. FC Kaiserslautern",
 }
+
+
+def load_match(source: str, match_id: str, **kwargs) -> MatchTracking:
+    """Dispatch to a loader by source name: 'idsse' or 'pff'."""
+    loaders = {"idsse": load_idsse, "pff": load_pff}
+    if source not in loaders:
+        raise ValueError(f"unknown source {source!r}; expected one of {sorted(loaders)}")
+    return loaders[source](match_id, **kwargs)

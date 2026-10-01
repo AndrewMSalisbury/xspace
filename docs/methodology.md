@@ -77,6 +77,10 @@ plus the single best cell.
   space. Planned: a second, slower, higher trajectory that can't be intercepted mid-flight.
 - **Offside** is not yet applied to receivers.
 - **Fixed physical parameters** for every player; could be fit per player from tracking data.
+- **Set pieces**: corners and free kicks pack the box, so defensive lines are meaningless there.
+  These phases need to be filtered out (or modelled separately) using event data.
+- **Broadcast tracking** (PFF): off-camera players are estimated, so far-side space is less
+  reliable. Compare against IDSSE's optical tracking to quantify this.
 - **No validation yet** — see roadmap.
 
 ## Roadmap

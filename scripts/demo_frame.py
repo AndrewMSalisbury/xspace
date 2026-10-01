@@ -1,4 +1,4 @@
-"""Render the Expected Space components for one frame of an open IDSSE match.
+"""Render the Expected Space components for one frame (IDSSE or PFF).
 
     uv run python scripts/demo_frame.py --match J03WMX --frame 3000
 """
@@ -13,21 +13,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mplsoccer import Pitch
 
-from xspace.io.loaders import IDSSE_MATCHES, load_idsse
+from xspace.io.loaders import load_match
 from xspace.metrics.space import frame_space, orient
 from xspace.physics.pitch_control import make_grid
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--match", default="J03WMX", choices=IDSSE_MATCHES)
+    ap.add_argument("--source", default="idsse", choices=["idsse", "pff"])
+    ap.add_argument("--match", default="J03WMX",
+                    help="IDSSE id (e.g. J03WMX) or PFF id (e.g. 3812)")
     ap.add_argument("--frame", type=int, default=3000)
     ap.add_argument("--cell", type=float, default=1.0)
     ap.add_argument("--out", default="docs/img/demo_frame.png")
     args = ap.parse_args()
 
     t0 = time.perf_counter()
-    match = load_idsse(args.match)
+    match = load_match(args.source, args.match)
     print(f"loaded {match.n_frames} frames in {time.perf_counter() - t0:.1f}s")
 
     xs, ys, grid = make_grid(args.cell)
@@ -69,7 +71,8 @@ def main() -> None:
             ax.axvline(line_x + 52.5, color="#f1faee", lw=1, ls=style, alpha=0.6, zorder=3)
         ax.set_title(title, color="white", fontsize=11)
     fig.patch.set_facecolor("#101418")
-    fig.suptitle(f"{IDSSE_MATCHES[args.match]} — frame {args.frame} — {att.name} attacking →",
+    fig.suptitle(f"{match.home.name} vs. {match.away.name} — frame {args.frame} — "
+                 f"{att.name} attacking →",
                  color="white")
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=110, facecolor=fig.get_facecolor())

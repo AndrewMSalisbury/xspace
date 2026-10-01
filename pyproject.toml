@@ -15,6 +15,7 @@ dependencies = [
     "matplotlib>=3.9",
     "mplsoccer>=1.4",
     "tqdm>=4.66",
+    "gdown>=6.4.1",
 ]
 
 [dependency-groups]

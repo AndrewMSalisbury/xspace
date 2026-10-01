@@ -8,20 +8,22 @@ from __future__ import annotations
 import argparse
 
 from xspace.export.web import frame_payload, write_json
-from xspace.io.loaders import IDSSE_MATCHES, load_idsse
+from xspace.io.loaders import load_match
 from xspace.metrics.space import frame_space
 from xspace.physics.pitch_control import make_grid
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--match", default="J03WMX", choices=IDSSE_MATCHES)
+    ap.add_argument("--source", default="idsse", choices=["idsse", "pff"])
+    ap.add_argument("--match", default="J03WMX",
+                    help="IDSSE id (e.g. J03WMX) or PFF id (e.g. 3812)")
     ap.add_argument("--frame", type=int, default=3000)
     ap.add_argument("--cell", type=float, default=1.0)
     ap.add_argument("--out", default="web/public/data/sample_frame.json")
     args = ap.parse_args()
 
-    match = load_idsse(args.match)
+    match = load_match(args.source, args.match)
     xs, ys, grid = make_grid(args.cell)
     fs = frame_space(match, args.frame, grid)
     if fs is None:
