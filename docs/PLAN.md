@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phase 0 complete; Phase 1 in progress (tasks 1–6 done, audit next) |
+| Status | Phases 0–1 complete (M1 reached 2026-10-01); Phase 2 next |
 
 ---
 
@@ -251,8 +251,10 @@ docs/                 # PLAN.md, methodology.md, figures
    tracked, estimated players (if exposed by PFF), velocity spikes. ✅ (except estimated
    players: kloppy drops PFF visibility). Also: sent-off players' ghost tracks removed
    (`io/lineups.py`).
-7. **Data audit notebook**: per match — frames, % alive, % flagged, sync error distribution,
-   possession split vs. official stats.
+7. **Data audit** ✅ — `scripts/data_audit.py` → [`docs/data_audit.md`](data_audit.md).
+   Possession split vs. official stats not done (no offline source for official figures).
+   Findings: PFF 10510 / 10511 have **no extra-time tracking** in the raw files (re-download to
+   confirm it isn't a truncated download).
 
 ### Deliverables
 
@@ -570,7 +572,7 @@ Article published; repo tagged `v1.0.0`; site linked from README and article.
 | Weeks | Dates (2026–27) | Phase | Milestone |
 |---|---|---|---|
 | 0 | Sep 30 | Phase 0 | ✅ Pipeline + viewer + data |
-| 1–2 | Oct 1 – Oct 14 | 1. Data layer | **M1:** events synced, phases labelled, audit done |
+| 1–2 | Oct 1 – Oct 14 | 1. Data layer | ✅ **M1:** events synced, phases labelled, audit done (Oct 1) |
 | 3–4 | Oct 15 – Oct 28 | 2. Timeline engine | **M2:** all 71 match timelines built |
 | 5–6 | Oct 29 – Nov 11 | 3. Exploitation | **M3:** event metrics + "moments" notebook |
 | 7–8 | Nov 12 – Nov 25 | 4. Validation | **M4:** validation report; tuned parameters |
