@@ -138,3 +138,16 @@ def test_estimate_offsets_recovers_event_lag():
     assert report.median_actor_ball_m < 0.05
     assert report.residual_offset_s == pytest.approx(0.0, abs=1 / FPS)
     assert (synced["frame"] >= 0).all()
+
+
+def test_goalkeeper_follows_substitution():
+    from xspace.io.loaders import assign_goalkeepers
+
+    match = line_match(4.0)
+    match.home.positions = ["GK", "UNK"] + ["UNK"] * 8 + ["GK"]  # slot 10 = sub keeper
+    half = match.n_frames // 2
+    match.home_pos[half:, 0] = np.nan  # first keeper goes off ...
+    match.home_pos[:half, 10] = np.nan  # ... and the second comes on
+    assign_goalkeepers(match)
+    assert match.gk_at(0, 0) == 0 and match.gk_at(0, match.n_frames - 1) == 10
+    assert match.gk_at(1, 0) == 0  # away: match-level fallback (no GK tag)

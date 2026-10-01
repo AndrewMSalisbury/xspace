@@ -47,18 +47,29 @@ def _nearest_frames(match: MatchTracking, periods: np.ndarray, times: np.ndarray
 
 def attach_frames(events: pd.DataFrame, match: MatchTracking,
                   offsets: dict[int, float] | None = None,
-                  tolerance_s: float = 0.1) -> pd.DataFrame:
+                  tolerance_s: float = 0.1, restart_snap_s: float = 3.0) -> pd.DataFrame:
     """Return a copy of `events` with `frame` (row index into `match` arrays), `sync_offset_s`
     (per-period offset added to `time_s`) and `sync_dt_s` (frame time − corrected event time).
 
     `frame` is -1 when no tracking frame lies within `tolerance_s` (e.g. the event happened
-    while the ball was dead and those frames were dropped).
+    while the ball was dead and those frames were dropped). Set-piece restarts up to
+    `restart_snap_s` before the next live frame are snapped forward to it.
     """
     out = events.copy()
     periods = out["period"].to_numpy()
     offset = np.array([(offsets or {}).get(int(p), 0.0) for p in periods], dtype=float)
-    frame, dt = _nearest_frames(match, periods, out["time_s"].to_numpy(float) + offset,
-                                tolerance_s)
+    times = out["time_s"].to_numpy(float) + offset
+    frame, dt = _nearest_frames(match, periods, times, tolerance_s)
+
+    # Restarts are often stamped just before the ball is live (dead frames are dropped):
+    # snap them forward to the first live frame of the same period.
+    restart = (out["setpiece"] != "open_play").to_numpy(dtype=bool) & (frame < 0)
+    for i in np.flatnonzero(restart):
+        idx = np.flatnonzero(match.period == periods[i])
+        k = np.searchsorted(match.timestamp[idx], times[i])
+        if k < len(idx) and match.timestamp[idx[k]] - times[i] <= restart_snap_s:
+            frame[i] = idx[k]
+            dt[i] = match.timestamp[idx[k]] - times[i]
     out["frame"] = frame
     out["sync_offset_s"] = offset
     out["sync_dt_s"] = dt

@@ -37,6 +37,30 @@ Parameters live in `PhysicsParams` (`src/xspace/physics/pitch_control.py`).
     52–62% of on-ball events are within 3 m. DFL event timing is noisy per event, so a per-event refinement (ETSY-style,
     Van Roy et al. 2021) is a candidate improvement.
 
+### Phases of play
+
+Per-frame labels from `label_phases` (`src/xspace/phases/possession.py`):
+
+- **Possession** comes from events, not the tracking `ball_owner` field. PFF's field is derived
+  from events anyway (99.9% agreement); IDSSE's flickers during duels (a change every ~3 s, 92%
+  agreement). The team in possession is the team of the latest *controlling* event (pass, cross,
+  shot, carry, reception, recovery). Challenges, clearances and touches don't change it.
+  After a stoppage, possession is back-filled from the first live frame to the restart event.
+- **Restart snapping**: restart events are often stamped up to ~1.5 s before the first live
+  tracking frame (dead frames are dropped), so sync snaps them forward by up to 3 s.
+- **Set-piece windows** run from the restart for 8 s (corners, free kicks, penalties), 4 s
+  (throw-ins, goal kicks, kick-offs) or 2 s (drop balls), ending early if possession changes.
+  These are starting values, to be tuned by inspection.
+- **Transition**: the first 10 s of a possession won in open play.
+- **Thirds** by ball x in the attacking direction of the team in possession.
+
+On 3812 (PFF) and J03WMX (IDSSE), open play is 84% and 86% of ball-in-play time, transitions
+28% in both.
+
+Goalkeepers are assigned **per frame** (`assign_goalkeepers`): the GK-tagged player on the
+pitch. Three PFF matches change keeper mid-game (3813 injury, 10507 substitution, 3828 red card).
+All 71 matches use a 105 × 68 m pitch, so per-stadium dimensions aren't needed for this data.
+
 ## 2. Time to intercept
 
 Shared by every component, and the same quantity Pressing Intensity is built on. A player keeps

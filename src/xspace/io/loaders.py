@@ -42,10 +42,20 @@ class MatchTracking:
     away_pos: np.ndarray  # (T, P_away, 2)
     home_vel: np.ndarray  # (T, P_home, 2) m/s
     away_vel: np.ndarray  # (T, P_away, 2)
+    # Per-frame goalkeeper slot (T,), -1 if none on the pitch. Derived on load (not cached) by
+    # `assign_goalkeepers`, so GK substitutions and red cards are handled.
+    home_gk: np.ndarray | None = None
+    away_gk: np.ndarray | None = None
 
     @property
     def n_frames(self) -> int:
         return len(self.period)
+
+    def gk_at(self, side: int, frame: int) -> int | None:
+        """Slot of side 0 (home) / 1 (away)'s goalkeeper at `frame`, or None."""
+        gk = self.home_gk if side == 0 else self.away_gk
+        slot = int(gk[frame]) if gk is not None else -1
+        return None if slot < 0 else slot
 
     def team_arrays(self, side: int) -> tuple[np.ndarray, np.ndarray]:
         """Positions and velocities for side 0 (home) or 1 (away)."""
@@ -79,7 +89,8 @@ def _fix_goalkeepers(team: Team, pos: np.ndarray, attacks_positive_x: bool) -> N
     """Pick the GK who actually played the most; if none is tagged, the deepest player.
 
     Squads list bench goalkeepers too, so the first 'GK' in the roster may never appear.
-    v0 uses one GK per team for the whole match (ignores GK substitutions).
+    This is the match-level GK; per-frame GKs (substitutions, red cards) come from
+    `assign_goalkeepers`.
     """
     presence = (~np.isnan(pos[:, :, 0])).sum(axis=0)
     tagged = [i for i, code in enumerate(team.positions) if code == "GK" and presence[i] > 0]
@@ -93,6 +104,27 @@ def _fix_goalkeepers(team: Team, pos: np.ndarray, attacks_positive_x: bool) -> N
     if np.all(np.isnan(mean_x)):
         return
     team.gk_index = int(np.nanargmin(mean_x) if attacks_positive_x else np.nanargmax(mean_x))
+
+
+def _goalkeeper_per_frame(team: Team, pos: np.ndarray) -> np.ndarray:
+    """GK slot per frame: the GK-tagged player on the pitch (most minutes wins ties); if none is
+    tagged/present, the team's match-level GK when on the pitch; else -1."""
+    present = ~np.isnan(pos[:, :, 0])
+    tagged = np.array([code == "GK" for code in team.positions], dtype=bool)
+    minutes = present.sum(axis=0)
+    score = np.where(present & tagged, minutes + 1, 0)  # +1 so a tagged player always beats 0
+    gk = np.where(score.max(axis=1) > 0, score.argmax(axis=1), -1)
+    if team.gk_index is not None:
+        fallback = (gk < 0) & present[:, team.gk_index]
+        gk[fallback] = team.gk_index
+    return gk.astype(np.int64)
+
+
+def assign_goalkeepers(match: MatchTracking) -> MatchTracking:
+    """Fill `home_gk` / `away_gk` (per-frame goalkeeper slots) in place and return the match."""
+    match.home_gk = _goalkeeper_per_frame(match.home, match.home_pos)
+    match.away_gk = _goalkeeper_per_frame(match.away, match.away_pos)
+    return match
 
 
 def from_kloppy(dataset: TrackingDataset, match_id: str = "unknown") -> MatchTracking:
@@ -123,7 +155,7 @@ def from_kloppy(dataset: TrackingDataset, match_id: str = "unknown") -> MatchTra
     _fix_goalkeepers(away, away_pos, attacks_positive_x=False)
 
     fps = float(dataset.metadata.frame_rate)
-    return MatchTracking(
+    return assign_goalkeepers(MatchTracking(
         match_id=match_id,
         frame_rate=fps,
         period=period,
@@ -136,7 +168,7 @@ def from_kloppy(dataset: TrackingDataset, match_id: str = "unknown") -> MatchTra
         away_pos=away_pos,
         home_vel=smooth_velocities(home_pos, fps, period),
         away_vel=smooth_velocities(away_pos, fps, period),
-    )
+    ))
 
 
 CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "processed"
@@ -153,7 +185,7 @@ def load_idsse(match_id: str = "J03WMX", limit: int | None = None,
     cache = CACHE_DIR / f"idsse_{match_id}.pkl"
     if use_cache and cache.exists():
         with cache.open("rb") as f:
-            match = pickle.load(f)
+            match = assign_goalkeepers(pickle.load(f))
         return match if limit is None else _head(match, limit)
 
     ds = sportec.load_open_tracking_data(match_id=match_id, limit=limit, only_alive=True)
@@ -180,7 +212,7 @@ def load_pff(match_id: str | int, limit: int | None = None,
     cache = CACHE_DIR / f"pff_{match_id}.pkl"
     if use_cache and cache.exists():
         with cache.open("rb") as f:
-            match = pickle.load(f)
+            match = assign_goalkeepers(pickle.load(f))
         return match if limit is None else _head(match, limit)
 
     tracking = PFF_DIR / "Tracking Data" / f"{match_id}.jsonl.bz2"

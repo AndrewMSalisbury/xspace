@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phase 0 complete (see §3) |
+| Status | Phase 0 complete; Phase 1 in progress (tasks 1–5 done, 6–7 next) |
 
 ---
 
@@ -226,19 +226,21 @@ docs/                 # PLAN.md, methodology.md, figures
 
 ### Tasks
 
-1. **Event loaders** (`io/events.py`)
+1. **Event loaders** (`io/events.py`) ✅
    - PFF: custom parser (kloppy has no PFF event loader) → `MatchEvents` table:
      `event_id, period, time_s, frame, team_side, player_id, type, setpiece_type, start_xy,
      end_xy, target_player_id, receiver_player_id, outcome, lines_broken, height`.
    - IDSSE: `kloppy.sportec.load_open_event_data` → same schema.
-2. **Event ↔ tracking sync** (`io/sync.py`)
+2. **Event ↔ tracking sync** (`io/sync.py`) ✅ — per-period offsets; all 7 IDSSE pass.
+   Follow-up: per-event refinement for IDSSE (only 52–62% of on-ball events within 3 m).
    - Map event times to frame indices per period.
    - Sanity check: ball within ~3 m of the event's player at the event frame; report
      median/95th-percentile mismatch per match; fail loudly if offsets are systematic.
-3. **Per-stadium pitch dimensions** from PFF metadata; generalise `make_grid`, xT interpolation
-   and zones to `(length, width)` per match.
-4. **Per-frame GK identity and on-pitch masks** (handles GK substitutions and red cards).
-5. **Phases of play** (`phases/possession.py`)
+3. ~~**Per-stadium pitch dimensions**~~ — not needed: all 71 matches are 105 × 68 m (checked
+   2026-10-01). Revisit only if a new data source adds other sizes.
+4. **Per-frame GK identity and on-pitch masks** (handles GK substitutions and red cards). ✅
+   On-pitch mask = non-NaN position; 3 PFF matches change keeper mid-game.
+5. **Phases of play** (`phases/possession.py`) ✅ — rules in `methodology.md`
    - Possession sequences (from events, cross-checked with tracking `ball_owner`).
    - `open_play` vs `set_piece` label per frame: a set piece "phase" lasts from the restart until
      the defending team has had ≥ N seconds to reorganise (start: until the ball is cleared from
