@@ -12,6 +12,31 @@ Parameters live in `PhysicsParams` (`src/xspace/physics/pitch_control.py`).
   12 m/s. Gaps (substitutions) are interpolated for filtering, then re-masked.
 - v0 assumes a 105 × 68 m pitch for every stadium.
 
+### Events and synchronisation
+
+- Events from both providers become one table (`MatchEvents`, `src/xspace/io/events.py`) in the
+  tracking coordinate frame, with times in seconds since period start on the tracking clock.
+- **PFF**: one row per possession event. Each row's own `eventTime` is used, not the shared
+  game-event `startTime` (PFF splits a touch-then-pass into `IT` + `PA` rows of one game event).
+  End locations aren't provided, so a ball-moving action ends where the ball is at the next
+  event (usually the reception) within 10 s. Raw coordinates are rotated 180° in the periods
+  where the home team attacks −x. Extra-time matches have no period start times in metadata;
+  the period's kick-off event is used instead (it equals `startPeriodN` where both exist).
+- **IDSSE**: DFL events via kloppy; pass end = receiver location (missing for incomplete passes).
+- **Sync** (`src/xspace/io/sync.py`): per period, find the time shift that minimises the median
+  distance between the tracking ball and the acting player at on-ball events, apply it, then
+  map each event to the nearest tracking frame (±0.1 s). The report records the residual shift,
+  which should be ≈ 0, and the remaining actor–ball distances.
+  - PFF needs no shift: tracking frames are tagged with their event ids. But PFF's *smoothed*
+    ball (what kloppy loads) is pulled onto the player at tagged events, so actor–ball distance
+    is ~0 by construction there. Event freeze frames use the *raw* ball, which differs by ~2.4 m
+    median (more when the ball is in the air).
+  - IDSSE event clocks are off by −1.2 to +1.3 s, in either direction, and differ between the
+    halves of one match, so offsets must be estimated per period. After the shift, all 7
+    matches have a median actor–ball distance of 1.5–2.6 m (J03WMX: 5.4 m → 1.7 m), but only
+    52–62% of on-ball events are within 3 m. DFL event timing is noisy per event, so a per-event refinement (ETSY-style,
+    Van Roy et al. 2021) is a candidate improvement.
+
 ## 2. Time to intercept
 
 Shared by every component, and the same quantity Pressing Intensity is built on. A player keeps
