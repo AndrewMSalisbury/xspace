@@ -59,6 +59,18 @@ On 3812 (PFF) and J03WMX (IDSSE), open play is 84% and 86% of ball-in-play time,
 
 Goalkeepers are assigned **per frame** (`assign_goalkeepers`): the GK-tagged player on the
 pitch. Three PFF matches change keeper mid-game (3813 injury, 10507 substitution, 3828 red card).
+PFF's smoothed tracking keeps a **sent-off player's track** after the card (3828: Hennessey
+"stays on" beside his replacement), so `remove_sent_off_players` (`src/xspace/io/lineups.py`)
+blanks dismissed players from their card onwards using event data. Substituted players already
+disappear correctly.
+
+### Quality flags
+
+`quality_flags` (`src/xspace/phases/quality.py`) marks each frame with bit flags: ball missing,
+a team with fewer than 10 players tracked, the ball moving faster than 45 m/s, or a player faster
+than 13 m/s between consecutive frames. On 3812 / 3828 (PFF) 93–96% of frames are clean (mostly
+missing ball, 4–6%); J03WMX (IDSSE) is 99.9% clean. PFF's per-player "estimated" visibility isn't
+exposed through kloppy, so it isn't flagged yet.
 All 71 matches use a 105 × 68 m pitch, so per-stadium dimensions aren't needed for this data.
 
 ## 2. Time to intercept

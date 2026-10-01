@@ -151,3 +151,33 @@ def test_goalkeeper_follows_substitution():
     assign_goalkeepers(match)
     assert match.gk_at(0, 0) == 0 and match.gk_at(0, match.n_frames - 1) == 10
     assert match.gk_at(1, 0) == 0  # away: match-level fallback (no GK tag)
+
+
+def test_pff_cards_and_subs():
+    red = pff_event(100.0, 1, "PA", event_id=1, player=10)
+    red["fouls"] = {"finalFoulOutcomeType": "R", "finalCulpritPlayerId": 22}
+    sub = pff_event(110.0, 1, game_type="SUB", player=None)
+    sub["gameEvents"].update(playerOffId=10, playerOnId=12)
+    ev = parse_pff_events([red, sub], META)
+    card = ev[ev["type"] == "card"].iloc[0]
+    assert card.player_id == "22" and card.outcome == "red"
+    s = ev[ev["type"] == "sub"].iloc[0]
+    assert (s.player_id, s.receiver_player_id) == ("10", "12")
+
+
+def test_sent_off_goalkeeper_is_removed_and_replaced():
+    from xspace.io.lineups import remove_sent_off_players
+    from xspace.io.loaders import assign_goalkeepers
+
+    match = line_match(10.0)
+    match.home.positions = ["GK"] + ["UNK"] * 9 + ["GK"]
+    match.home_pos[: match.n_frames // 2, 10] = np.nan  # sub keeper comes on at 5 s ...
+    assign_goalkeepers(match)
+    assert match.gk_at(0, match.n_frames - 1) == 0  # ... but the ghost track wins the tie
+    card = passes_at(np.array([4.0]), [0])
+    card["type"] = pd.array(["card"], dtype="string")
+    card["outcome"] = pd.array(["red"], dtype="string")
+    assert remove_sent_off_players(match, card) == ["h0"]
+    assert np.isnan(match.home_pos[match.timestamp >= 4.0, 0]).all()
+    assert match.gk_at(0, match.n_frames - 1) == 10
+    assert match.gk_at(0, int(4.5 * FPS)) is None  # between the card and the replacement

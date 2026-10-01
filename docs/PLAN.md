@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phase 0 complete; Phase 1 in progress (tasks 1–5 done, 6–7 next) |
+| Status | Phase 0 complete; Phase 1 in progress (tasks 1–6 done, audit next) |
 
 ---
 
@@ -248,7 +248,9 @@ docs/                 # PLAN.md, methodology.md, figures
    - Transition labels: first 10 s after a turnover.
    - Pitch thirds / build-up vs progression vs final third by ball x.
 6. **Quality flags** (`phases/quality.py`): missing ball, fewer than 10 outfield players
-   tracked, estimated players (if exposed by PFF), velocity spikes.
+   tracked, estimated players (if exposed by PFF), velocity spikes. ✅ (except estimated
+   players: kloppy drops PFF visibility). Also: sent-off players' ghost tracks removed
+   (`io/lineups.py`).
 7. **Data audit notebook**: per match — frames, % alive, % flagged, sync error distribution,
    possession split vs. official stats.
 

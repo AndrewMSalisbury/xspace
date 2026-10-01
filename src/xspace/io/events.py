@@ -32,9 +32,9 @@ EVENT_COLUMNS: dict[str, str] = {
     "end_x": "float64",  # NaN when unknown / not meaningful
     "end_y": "float64",
     "target_player_id": "string",  # intended receiver (PFF only)
-    "receiver_player_id": "string",  # actual receiver
+    "receiver_player_id": "string",  # actual receiver; for subs, the player coming on
     "success": "boolean",  # pass/cross completed, shot scored, carry retained; NA otherwise
-    "outcome": "string",  # raw provider outcome code
+    "outcome": "string",  # raw provider outcome code; for cards one of CARD_OUTCOMES
     "height": "string",  # raw provider ball-height code
     "lines_broken": "string",  # raw provider code (PFF only)
 }
@@ -47,6 +47,9 @@ SETPIECE_TYPES = (
     "open_play", "kick_off", "throw_in", "free_kick", "goal_kick", "corner", "penalty",
     "drop_ball",
 )
+# Card outcomes (normalised across providers); the last two send the player off.
+CARD_OUTCOMES = ("yellow", "second_yellow", "red")
+SENT_OFF = ("second_yellow", "red")
 # Types whose end location is where the ball went next.
 BALL_MOVING_TYPES = ("pass", "cross", "shot", "carry", "clearance")
 
@@ -85,6 +88,7 @@ PFF_TYPES = {
     "CH": "challenge", "CL": "clearance", "RE": "rebound",
 }
 PFF_GAME_TYPES = {"OUT": "out", "SUB": "sub"}
+PFF_CARDS = {"Y": "yellow", "S": "second_yellow", "R": "red"}
 PFF_SETPIECES = {
     "O": "open_play", "K": "kick_off", "T": "throw_in", "F": "free_kick", "G": "goal_kick",
     "C": "corner", "P": "penalty", "D": "drop_ball",
@@ -186,12 +190,14 @@ def parse_pff_events(raw: list[dict], meta: dict) -> pd.DataFrame:
             height = pe.get("ballHeightType") or pe.get("crossType")
         else:
             height = None
+        player = ge.get("playerOffId") if etype == "sub" else ge.get("playerId")
+        receiver = ge.get("playerOnId") if etype == "sub" else pe.get("receiverPlayerId")
         rows.append({
             "event_id": str(ev["possessionEventId"] or f"g{ev['gameEventId']}-{ptype or etype}"),
             "period": period,
             "time_s": ev["eventTime"] - starts[period],
             "team_side": team_side,
-            "player_id": _pff_id(ge.get("playerId")),
+            "player_id": _pff_id(player),
             "type": etype,
             "setpiece": PFF_SETPIECES.get(ge.get("setpieceType") or "O", "open_play"),
             "start_x": bx,
@@ -199,13 +205,23 @@ def parse_pff_events(raw: list[dict], meta: dict) -> pd.DataFrame:
             "end_x": np.nan,
             "end_y": np.nan,
             "target_player_id": _pff_id(pe.get("targetPlayerId")),
-            "receiver_player_id": _pff_id(pe.get("receiverPlayerId")),
+            "receiver_player_id": _pff_id(receiver),
             "success": success,
             "outcome": outcome,
             "height": height,
             "lines_broken": pe.get("linesBrokenType"),
             "_video_t": ev["eventTime"],
         })
+
+        # Cards hang off the foul on an on-ball event; emit them as their own rows.
+        card = PFF_CARDS.get((ev.get("fouls") or {}).get("finalFoulOutcomeType"))
+        culprit = (ev.get("fouls") or {}).get("finalCulpritPlayerId")
+        if card and culprit is not None:
+            rows.append({**rows[-1], "event_id": f"g{ev['gameEventId']}-card", "type": "card",
+                         "player_id": str(culprit), "team_side": -1, "end_x": np.nan,
+                         "end_y": np.nan, "target_player_id": None,
+                         "receiver_player_id": None, "success": None, "outcome": card,
+                         "height": None, "lines_broken": None})
 
     _pff_end_locations(rows, ball_at)
     for r in rows:
@@ -282,6 +298,8 @@ def from_kloppy_events(dataset) -> pd.DataFrame:
 
         end = None
         receiver = None
+        if etype == "sub" and getattr(e, "replacement_player", None):
+            receiver = e.replacement_player.player_id
         if etype in ("pass", "cross"):
             end = e.receiver_coordinates
             receiver = e.receiver_player.player_id if e.receiver_player else None
@@ -291,6 +309,9 @@ def from_kloppy_events(dataset) -> pd.DataFrame:
             end = getattr(e, "end_coordinates", None)
 
         result = e.result.name if getattr(e, "result", None) is not None else None
+        if etype == "card" and getattr(e, "card_type", None) is not None:
+            result = {"FIRST_YELLOW": "yellow", "SECOND_YELLOW": "second_yellow",
+                      "RED": "red"}.get(e.card_type.name, e.card_type.name.lower())
         if etype in ("pass", "cross"):
             success = None if result is None else result == "COMPLETE"
         elif etype == "shot":
