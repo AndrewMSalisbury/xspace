@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phases 0–1 complete (M1 reached 2026-10-01); Phase 2 next |
+| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 next |
 
 ---
 
@@ -305,9 +305,27 @@ Target: full recompute of all matches in **≤ 1.5 h** on this machine, single m
 
 ### Deliverables
 
-- `scripts/build_timeline.py --source pff --match all`
-- `metrics/timeline.py` + tests (determinism; parallel == serial results).
-- First exploratory plots: xSpace over a match, by team, with goals marked.
+- `scripts/build_timeline.py --source pff --match all` ✅
+- `metrics/timeline.py` + tests (determinism; parallel == serial results). ✅
+- First exploratory plots: xSpace over a match, by team, with goals marked. ✅
+  (`notebooks/timeline_sanity.ipynb`)
+
+### Outcome (2026-10-01)
+
+- `config.py` holds physics params, timeline settings and paths; outputs carry the git SHA and
+  a hash of every result-affecting setting.
+- **Optimisation needed only step 3 of the list, plus one trick**: float32, the logistic
+  computed by repeated multiplication instead of `exp` per step, and dropping converged cells.
+  Pitch control 24 → 4 ms, reachability 10 → 2 ms per frame (2 m grid); results match the
+  float64 reference to ~1e-6. Numba / GPU not needed.
+- Parallel scaling on this laptop flattens out (~9× at 24 workers; 30 workers broke the Windows
+  process pool), so per-frame speed mattered more than core count. Default: 16 workers.
+- All 71 timelines build in **22 min** (14–20 s per match), 1.28 M sampled frames, ~91 MB.
+- The sanity check found a Phase 1 bug: **PFF extra time was loaded a whole pitch off**
+  (kloppy); fixed on load (`recentre_periods`).
+- Turnovers: space *behind* the defence rises for ~8 s after the ball is won; total xSpace
+  doesn't, because the new attackers are still in defensive shape (see `methodology.md`).
+- Web skeleton (planned alongside Phase 2) **not started**.
 
 ### Definition of done
 
@@ -573,7 +591,7 @@ Article published; repo tagged `v1.0.0`; site linked from README and article.
 |---|---|---|---|
 | 0 | Sep 30 | Phase 0 | ✅ Pipeline + viewer + data |
 | 1–2 | Oct 1 – Oct 14 | 1. Data layer | ✅ **M1:** events synced, phases labelled, audit done (Oct 1) |
-| 3–4 | Oct 15 – Oct 28 | 2. Timeline engine | **M2:** all 71 match timelines built |
+| 3–4 | Oct 15 – Oct 28 | 2. Timeline engine | ✅ **M2:** all 71 match timelines built (Oct 1) |
 | 5–6 | Oct 29 – Nov 11 | 3. Exploitation | **M3:** event metrics + "moments" notebook |
 | 7–8 | Nov 12 – Nov 25 | 4. Validation | **M4:** validation report; tuned parameters |
 | 9–10 | Nov 26 – Dec 9 | 5. Ratings (+6 in parallel) | **M5:** match/team/player ratings |

@@ -45,6 +45,7 @@ uv sync                                              # Python env + dependencies
 uv run pytest                                        # tests
 uv run python scripts/demo_frame.py --frame 3000     # render docs/img/demo_frame.png
 uv run python scripts/export_frame.py --frame 3000   # export a frame for the web app
+uv run python scripts/build_timeline.py --source all # xSpace at 5 Hz for every match
 
 cd web && npm install && npm run dev                 # http://localhost:5173
 ```

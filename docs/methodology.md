@@ -1,7 +1,7 @@
 # Methodology
 
 Working notes on how Expected Space (xSpace) is computed, what it assumes, and what's next.
-Parameters live in `PhysicsParams` (`src/xspace/physics/pitch_control.py`).
+Every tunable setting (physics, grids, sampling, paths) lives in `src/xspace/config.py`.
 
 ## 1. Preprocessing
 
@@ -11,6 +11,9 @@ Parameters live in `PhysicsParams` (`src/xspace/physics/pitch_control.py`).
 - Velocities: Savitzky–Golay derivative (0.28 s window, order 2), per period, speeds clipped at
   12 m/s. Gaps (substitutions) are interpolated for filtering, then re-masked.
 - v0 assumes a 105 × 68 m pitch for every stadium.
+- PFF extra time: kloppy 3.19 leaves periods 3–4 shifted by a whole pitch length and width
+  (x ≈ ±105, y ≈ ±68 m off; a pure translation, checked with the keepers' positions).
+  `recentre_periods` moves any period whose median position is off the pitch back on load.
 
 ### Events and synchronisation
 
@@ -92,6 +95,14 @@ defending goalkeeper) until attack + defence control ≥ 0.99, then is normalise
 
 Per-player control shares are kept, for attributing space to runners later.
 
+**Implementation.** Both teams are integrated together as one (players × cells) block in
+float32. The arrival probability is `1 / (1 + E)` with `E = exp(−k (t − T))`, so each time step
+multiplies `E` by the constant `exp(−k Δt)` instead of evaluating `exp` again; converged cells
+are dropped from the working arrays as the integration proceeds. This is ~6× faster than
+the direct version and matches a float64 reference to ~1e-6 (a cell sitting exactly at the
+convergence tolerance can stop one step apart: ≤ 1e-3). `tests/test_timeline.py` keeps the
+direct float64 implementation as an oracle.
+
 ## 4. Pass reachability
 
 For each cell, sample 12 points along the straight passing lane. At each point, each defender
@@ -130,6 +141,40 @@ stored separately.
 Frame totals are area-weighted sums (`Σ xSpace × cell area`, units xT·m²), overall and per zone,
 plus the single best cell.
 
+## 8. Match timeline
+
+`build_timeline` (`src/xspace/metrics/timeline.py`; CLI `scripts/build_timeline.py`) computes
+xSpace for every match at 5 Hz (every 5th frame at 25 Hz, every 6th at 29.97 fps) on a 2 m grid.
+Every sampled frame gets a row; metrics are computed only when `status == "ok"`:
+
+| status | Meaning |
+|---|---|
+| ok | computed |
+| quality | a quality flag is set (default: any flag) |
+| no_possession | no team in possession yet (start of a period) |
+| set_piece | inside a set-piece window |
+
+The attacking side is the **event-based** possession from `label_phases`. Each row holds the
+labels (period, time, possession, set piece, transition, third, flags) and the metrics: total
+and per-zone xSpace, the best cell (value, x, y, zone), mean attacking control, offside / back /
+mid line x, block width, compactness (back − mid line), ball position and xT, and players on the
+pitch per team. All x / y values are in the attacking team's frame (attacking +x).
+
+Output: `data/processed/timeline/{source}_{match}.parquet`, with the git SHA and a hash of every
+setting that affects results (`config.settings_dict`: physics, timeline, phase windows, quality
+thresholds, xT grid) in the file metadata. The build skips files whose hash is current.
+Frames are spread over a process pool in chunks; each chunk carries only its own frames'
+arrays, and a parallel run equals the serial run exactly (tested).
+
+### First results (all 71 matches)
+
+From `notebooks/timeline_sanity.ipynb`: 83–86% of sampled frames are computed (the rest are
+set-piece windows, and on PFF ~6% quality flags, mostly a missing ball). IDSSE and PFF give
+xSpace on the same scale (team-match median ≈ 1.2 xT·m²). After a turnover, space **behind** the
+defence rises for ~8 s and stays above restart possessions until ~15 s, and within each third
+transitions have more space behind and a higher, less compact line. *Total* xSpace isn't higher
+in transitions, because the team that just won the ball controls less of the pitch.
+
 ## Known limitations
 
 - **Independence**: defenders are treated as acting independently (same caveat as Pressing
@@ -146,7 +191,7 @@ plus the single best cell.
 
 ## Roadmap
 
-1. **Match timeline** — compute every frame at 5 Hz across a match (parallelised; GPU later).
+1. ~~**Match timeline**~~ — done (section 8).
 2. **Exploited vs. available** — link to events: value actually gained by the next pass/carry,
    and the *decision gap* (best reachable option − chosen option).
 3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
