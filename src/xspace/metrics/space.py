@@ -129,16 +129,16 @@ def frame_space(match: MatchTracking, frame: int, grid: np.ndarray,
 
     att_pos, att_vel = match.team_arrays(side)
     def_pos, def_vel = match.team_arrays(1 - side)
-    defending = match.away if side == 0 else match.home
+    def_gk = match.gk_at(1 - side, frame)
     ap, av = orient(att_pos[frame], side), orient(att_vel[frame], side)
     dp, dv = orient(def_pos[frame], side), orient(def_vel[frame], side)
     b = orient(ball, side)
 
-    control = pitch_control(ap, av, dp, dv, b, grid, def_gk=defending.gk_index, params=params)
+    control = pitch_control(ap, av, dp, dv, b, grid, def_gk=def_gk, params=params)
     reach = pass_reachability(b, dp, dv, grid, params)
     value = np.maximum(xt_value(grid) - xt_value(b[None])[0], 0.0)
     xspace = control.attack * reach * value
-    shape = defensive_shape(dp, defending.gk_index, float(b[0]))
+    shape = defensive_shape(dp, def_gk, float(b[0]))
     zone = zone_cells(grid, shape)
 
     cell_area = PITCH_LENGTH * PITCH_WIDTH / len(grid)

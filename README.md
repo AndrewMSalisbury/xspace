@@ -26,7 +26,8 @@ xSpace(cell) = control(cell) × reach(cell) × xT_gained(cell)
 Each cell is labelled relative to the defensive shape — **behind** the back line, **between** the
 lines, **wide** of the block, or **in front** — so space can be profiled by zone.
 
-See [docs/methodology.md](docs/methodology.md) for details, assumptions and the roadmap.
+See [docs/methodology.md](docs/methodology.md) for details and assumptions, and
+[docs/PLAN.md](docs/PLAN.md) for the full project plan.
 
 ## Outputs (planned)
 
