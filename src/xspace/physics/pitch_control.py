@@ -12,25 +12,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from xspace.config import DEFAULT_PARAMS, PhysicsParams  # noqa: F401  (re-exported)
 from xspace.constants import PITCH_LENGTH, PITCH_WIDTH
-
-
-@dataclass(frozen=True)
-class PhysicsParams:
-    reaction_time: float = 0.7  # s before a player can change course
-    max_speed: float = 5.0  # m/s, average max running speed
-    tti_sigma: float = 0.45  # s, uncertainty in arrival time (same sigma as Pressing Intensity)
-    lambda_att: float = 4.3  # 1/s, rate of gaining control once at the ball
-    kappa_def: float = 1.0  # defender advantage multiplier on lambda
-    lambda_gk_factor: float = 3.0  # goalkeepers can handle the ball
-    ball_speed: float = 15.0  # m/s, average ground-pass speed
-    int_dt: float = 0.04  # s, integration step
-    max_int_time: float = 10.0  # s
-    convergence_tol: float = 0.01
-    lane_samples: int = 12  # points sampled along a pass to test interception
-
-
-DEFAULT_PARAMS = PhysicsParams()
 
 
 def make_grid(cell_size: float = 1.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -45,20 +28,30 @@ def make_grid(cell_size: float = 1.0) -> tuple[np.ndarray, np.ndarray, np.ndarra
 
 def time_to_intercept(pos: np.ndarray, vel: np.ndarray, targets: np.ndarray,
                       params: PhysicsParams = DEFAULT_PARAMS) -> np.ndarray:
-    """Time for each player to reach each target point.
+    """Time for each player to reach each target point (float32).
 
     Players keep moving along their current velocity for `reaction_time`, then run in a
     straight line at `max_speed`. pos, vel: (N, 2). targets: (..., 2). Returns (N, ...).
     """
-    r_react = pos + vel * params.reaction_time  # (N, 2)
-    shape = (len(pos),) + (1,) * (targets.ndim - 1) + (2,)
-    dist = np.linalg.norm(targets[None] - r_react.reshape(shape), axis=-1)
-    return params.reaction_time + dist / params.max_speed
+    r_react = (pos + vel * params.reaction_time).astype(np.float32)
+    r_react = r_react.reshape((len(pos),) + (1,) * (targets.ndim - 1) + (2,))
+    t = targets.astype(np.float32)
+    dx = t[None, ..., 0] - r_react[..., 0]
+    dy = t[None, ..., 1] - r_react[..., 1]
+    return np.float32(params.reaction_time) + np.sqrt(dx * dx + dy * dy) / np.float32(
+        params.max_speed)
 
 
-def _arrival_prob(t: np.ndarray, tti: np.ndarray, sigma: float) -> np.ndarray:
-    """P(player has arrived by time t), logistic in (t - tti)."""
-    return 1.0 / (1.0 + np.exp(-np.pi / np.sqrt(3.0) / sigma * (t - tti)))
+def _logistic_rate(sigma: float) -> float:
+    """Slope of the arrival logistic: P(arrived by t) = 1 / (1 + exp(-k (t - tti)))."""
+    return np.pi / np.sqrt(3.0) / sigma
+
+
+# Cap on logistic exponents: e^60 can't fall to O(1) within max_int_time (k * 10 s ≈ 40), and
+# it keeps float32 from overflowing.
+_MAX_EXPONENT = 60.0
+# Drop converged cells from the working arrays once fewer than this share is still active.
+_COMPACT_BELOW = 0.7
 
 
 def _valid(pos: np.ndarray, vel: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -85,40 +78,54 @@ def pitch_control(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndarray,
     """
     a_pos, a_vel, a_mask = _valid(att_pos, att_vel)
     d_pos, d_vel, d_mask = _valid(def_pos, def_vel)
-    n_grid = len(grid)
+    n_att, n_grid = len(a_pos), len(grid)
+    f32 = np.float32
 
-    tti_att = time_to_intercept(a_pos, a_vel, grid, params)  # (Na, G)
-    tti_def = time_to_intercept(d_pos, d_vel, grid, params)  # (Nd, G)
-    ball_t = np.linalg.norm(grid - ball, axis=1) / params.ball_speed  # (G,)
-
-    lam_att = np.full(len(a_pos), params.lambda_att)
-    lam_def = np.full(len(d_pos), params.lambda_att * params.kappa_def)
+    # Both teams in one (N, G) block: attackers first, then defenders.
+    tti = time_to_intercept(np.concatenate([a_pos, d_pos]), np.concatenate([a_vel, d_vel]),
+                            grid, params)
+    ball_t = (np.sqrt(((grid - ball) ** 2).sum(axis=1)) / params.ball_speed).astype(f32)
+    lam = np.r_[np.full(n_att, params.lambda_att),
+                np.full(len(d_pos), params.lambda_att * params.kappa_def)]
     if def_gk is not None and d_mask[def_gk]:
-        lam_def[np.flatnonzero(d_mask).tolist().index(def_gk)] *= params.lambda_gk_factor
+        lam[n_att + np.flatnonzero(d_mask).tolist().index(def_gk)] *= params.lambda_gk_factor
+    lam_dt = (lam * params.int_dt).astype(f32)[:, None]
 
-    ppcf_att = np.zeros((len(a_pos), n_grid))
-    ppcf_def = np.zeros((len(d_pos), n_grid))
-    total = np.zeros(n_grid)
+    # Integrate from the ball's arrival in steps of int_dt. P(arrived) = 1 / (1 + E) with
+    # E = exp(-k (t - tti)), so each step just multiplies E by exp(-k dt): no exp in the loop.
+    k = _logistic_rate(params.tti_sigma)
+    E = np.exp(np.minimum(k * (tti - ball_t[None]), _MAX_EXPONENT)).astype(f32)
+    decay = f32(np.exp(-k * params.int_dt))
+    tol = f32(1.0 - params.convergence_tol)
+
+    ppcf_all = np.zeros((len(lam), n_grid), f32)
+    total_all = np.zeros(n_grid, f32)
+    cells = np.arange(n_grid)  # grid index of each working column
+    ppcf = np.zeros_like(E)
+    total = np.zeros(n_grid, f32)
     active = np.ones(n_grid, dtype=bool)
-    n_steps = int(params.max_int_time / params.int_dt)
-
-    for k in range(1, n_steps + 1):
-        idx = np.flatnonzero(active)
-        if idx.size == 0:
+    for _ in range(int(params.max_int_time / params.int_dt)):
+        remaining = np.where(active, np.maximum(1 - total, 0), 0).astype(f32, copy=False)
+        step = lam_dt / (1 + E) * remaining
+        ppcf += step
+        total += step.sum(axis=0)
+        active &= total < tol
+        n_active = int(active.sum())
+        if n_active == 0:
             break
-        t = ball_t[idx] - params.int_dt + k * params.int_dt
-        remaining = 1.0 - total[idx]
-        d_att = remaining * _arrival_prob(t, tti_att[:, idx], params.tti_sigma) * lam_att[:, None]
-        d_def = remaining * _arrival_prob(t, tti_def[:, idx], params.tti_sigma) * lam_def[:, None]
-        ppcf_att[:, idx] += np.maximum(d_att * params.int_dt, 0.0)
-        ppcf_def[:, idx] += np.maximum(d_def * params.int_dt, 0.0)
-        total[idx] = ppcf_att[:, idx].sum(axis=0) + ppcf_def[:, idx].sum(axis=0)
-        active[idx] = total[idx] < 1.0 - params.convergence_tol
+        if n_active < _COMPACT_BELOW * len(cells):
+            done = ~active
+            ppcf_all[:, cells[done]] = ppcf[:, done]
+            total_all[cells[done]] = total[done]
+            cells, E, ppcf = cells[active], E[:, active], ppcf[:, active]
+            total, active = total[active], active[active]
+        E *= decay
+    ppcf_all[:, cells] = ppcf
+    total_all[cells] = total
 
     # Normalise away the small residual left by the convergence tolerance.
-    norm = np.maximum(total, 1e-9)
-    ppcf_att /= norm
-    ppcf_def /= norm
+    ppcf_all /= np.maximum(total_all, 1e-9)
+    ppcf_att, ppcf_def = ppcf_all[:n_att], ppcf_all[n_att:]
     return ControlSurface(
         attack=ppcf_att.sum(axis=0),
         defence=ppcf_def.sum(axis=0),
@@ -140,8 +147,10 @@ def pass_reachability(ball: np.ndarray, def_pos: np.ndarray, def_vel: np.ndarray
         return np.ones(len(grid))
     s = np.linspace(0.0, 1.0, params.lane_samples + 2)[1:-1]  # exclude passer and target
     lane = ball[None, None, :] + s[None, :, None] * (grid - ball)[:, None, :]  # (G, S, 2)
-    ball_t = np.linalg.norm(lane - ball, axis=-1) / params.ball_speed  # (G, S)
+    dist = np.sqrt(((grid - ball) ** 2).sum(axis=1))
+    ball_t = (s[None, :] * dist[:, None] / params.ball_speed).astype(np.float32)  # (G, S)
     tti = time_to_intercept(d_pos, d_vel, lane, params)  # (Nd, G, S)
-    p_int = _arrival_prob(ball_t[None], tti, params.tti_sigma)
-    p_blocked = 1.0 - np.prod(1.0 - p_int, axis=(0, 2))
-    return 1.0 - p_blocked
+    # 1 - p_intercept = 1 - logistic(k (ball_t - tti)) = 1 / (1 + exp(k (ball_t - tti)))
+    k = np.float32(_logistic_rate(params.tti_sigma))
+    p_free = 1.0 / (1.0 + np.exp(np.minimum(k * (ball_t[None] - tti), _MAX_EXPONENT)))
+    return np.prod(p_free, axis=(0, 2)).astype(np.float64)
