@@ -184,6 +184,45 @@ defence rises for ~8 s and stays above restart possessions until ~15 s, and with
 transitions have more space behind and a higher, less compact line. *Total* xSpace isn't higher
 in transitions, because the team that just won the ball controls less of the pitch.
 
+## 9. Exploitation: was the space used?
+
+`build_actions` (`src/xspace/metrics/exploitation.py`; CLI `scripts/build_actions.py`) gives one
+row per open-play pass, cross and carry. At the action's **release frame** (section 1; refined
+per event for IDSSE) it computes the frame's xSpace on a **1 m grid** for the acting team and
+compares it with the point the ball was sent to:
+
+| Column | Meaning |
+|---|---|
+| `available`, per zone | frame total xSpace (as in the timeline) |
+| `best` (+ x, y, zone) | the frame's best cell |
+| `chosen` (+ x, y, zone) | xSpace at the chosen point's cell; `chosen_zone` is the zone targeted |
+| `chosen_rank` | share of the frame's positive-xSpace cells worth less than the chosen one |
+| `decision_gap` | `best − chosen` (≥ 0) |
+| `xt_gained` | xT(end) − xT(origin) if completed, −xT(origin) if lost |
+| `exploited` | completed, `chosen_rank` ≥ 0.9 and `chosen` ≥ 0.005 |
+| `missed` | `best` ≥ 0.02 (≈ top 5% of timeline frames) and `chosen_rank` < 0.5 |
+| `owner_id`, `best_owner_id` | attacker with the largest pitch-control share at the chosen / best cell |
+
+The **chosen point** (`chosen_source`) is the end location for completed actions; for failed
+PFF passes, the intended target (`targetPlayerId`) projected along their velocity for the
+ball's flight time; otherwise the ball at the next event, which for a cut-out pass is where it
+was intercepted (so it understates the intent). xSpace counts only forward value
+(section 5), so backward and square passes score `chosen = 0`; that is a choice, not a bug: the
+metric asks whether *valuable* space was used. Thresholds live in `ExploitationConfig`
+(`config.py`) and are starting values; they join the params hash for action files only.
+
+### First results (all 71 matches)
+
+From `notebooks/moments.ipynb`: 68,464 open-play actions, 96–99% computed. For completed passes
+the attacker owning the chosen cell is the actual receiver 86% of the time (PFF; 77% IDSSE).
+39% of actions go into zero xSpace (backward or square; 92% completed). Completed actions into
+*low*-ranked positive space gain the most xT: they are long (median 32 m vs 12 m) ground
+passes, completed 55% of the time although the reach model rates them nearly unreachable. So
+reachability is too pessimistic for long passes (fixed 15 m/s ball, ground lanes only) and
+`chosen_rank` currently favours short, safe progressions; calibrating reach against observed
+completion is the first Phase 4 task. Exploited moments look right; missed moments are
+dominated by best cells near the six-yard box, where borrowed xT is very high.
+
 ## Known limitations
 
 - **Independence**: defenders are treated as acting independently (same caveat as Pressing
@@ -191,6 +230,7 @@ in transitions, because the team that just won the ball controls less of the pit
 - **Ground passes only**: lofted balls over the line aren't modelled, which undercounts "behind"
   space. Planned: a second, slower, higher trajectory that can't be intercepted mid-flight.
 - **Offside** is not yet applied to receivers.
+- **Long passes**: reachability is too pessimistic beyond ~25 m (see section 9 results).
 - **Fixed physical parameters** for every player; could be fit per player from tracking data.
 - **Set pieces**: corners and free kicks pack the box, so defensive lines are meaningless there.
   These phases need to be filtered out (or modelled separately) using event data.
@@ -201,8 +241,8 @@ in transitions, because the team that just won the ball controls less of the pit
 ## Roadmap
 
 1. ~~**Match timeline**~~ — done (section 8).
-2. **Exploited vs. available** — link to events: value actually gained by the next pass/carry,
-   and the *decision gap* (best reachable option − chosen option).
+2. ~~**Exploited vs. available**~~ — done (section 9). Next: off-ball runners, possession-level
+   metrics, threshold tuning by inspection.
 3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
    and xG in the next 10 s? Compare against plain pitch control and OBSO as baselines.
 4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).

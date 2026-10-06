@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 next |
+| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 core done 2026-10-06 (event metrics + moments notebook); possession-level metrics and video check remain |
 
 ---
 
@@ -373,9 +373,21 @@ Use PFF's `targetPlayerId` for intent; fall back to end location for IDSSE.
 
 ### Deliverables
 
-- `metrics/exploitation.py`, event metrics Parquet for all matches, tests on hand-built frames.
-- A "moments" notebook: top 20 exploited and top 20 missed opportunities across the World Cup,
-  rendered as figures — the sanity check and future showcase content.
+- [x] `metrics/exploitation.py`, event metrics Parquet for all matches, tests on hand-built frames.
+- [x] A "moments" notebook: top 20 exploited and top 20 missed opportunities (`notebooks/moments.ipynb`;
+  frame figures from IDSSE, World Cup moments as tables until PFF's terms are confirmed).
+- [x] Prerequisite: per-event release frames for IDSSE (`io.sync.refine_release_frames`).
+- [x] Space owner per action (`owner_id`, `best_owner_id`): the runner-credit ingredient.
+- [ ] Possession-level metrics (xSpace conceded per possession, time-to-exploit, box entry / shot).
+- [ ] Eye test against video (PFF `videoUrl`) for a sample of top / bottom moments.
+
+### Outcome so far (2026-10-06)
+
+All 71 matches: 68,464 open-play actions, 96–99% computed, 9.6 min build. The control model
+assigns the chosen space to the actual receiver 86% (PFF) / 77% (IDSSE) of the time. Exploited
+moments look right; missed moments lean on six-yard-box cells (high borrowed xT). Main finding:
+long passes are under-rated by reachability (55% completed where the model says ~unreachable),
+so rank-based ratings wait for Phase 4 calibration. Details in `methodology.md` section 9.
 
 ### Definition of done
 
