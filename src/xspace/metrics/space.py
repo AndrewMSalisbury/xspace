@@ -4,7 +4,10 @@ For every grid cell g in a frame, with the attacking team oriented towards +x:
 
     xspace(g) = control_att(g) * reach(g) * value(g)
 
-- control_att: Spearman pitch control (can an attacker get there first?)
+- control_att: Spearman pitch control (can an attacker get there first?). Attackers in an
+               offside position (beyond the offside line by more than
+               `PhysicsParams.offside_margin`) are left out: they can't receive a pass played
+               now, so their space goes to the next player, usually a defender.
 - reach:       P(a pass from the ball to g is not intercepted en route)
 - value:       xT gained by moving the ball there, max(xT(g) - xT(ball), 0). Raw xT would let
                the huge, safe, low-value area in a team's own half dominate every total.
@@ -53,6 +56,7 @@ class FrameSpace:
     xspace: np.ndarray  # (G,)
     zone: np.ndarray  # (G,) int index into ZONES
     shape: DefensiveShape
+    offside: np.ndarray  # (P_att,) bool: roster slots left out as offside
     totals: dict[str, float] = field(default_factory=dict)
 
 
@@ -108,6 +112,20 @@ def defensive_shape(def_pos: np.ndarray, gk_index: int | None, ball_x: float) ->
     )
 
 
+def offside_attackers(att_pos: np.ndarray, ball: np.ndarray, offside_line: float,
+                      margin: float) -> np.ndarray:
+    """(P,) bool: attackers (attacking +x) more than `margin` beyond the offside line.
+
+    The player nearest the ball (within 3 m) is never offside: they're the one playing it.
+    """
+    x = att_pos[:, 0]
+    off = np.nan_to_num(x, nan=-np.inf) > offside_line + margin
+    d = np.linalg.norm(att_pos - ball, axis=1)
+    if np.isfinite(d).any() and np.nanmin(d) <= 3.0:
+        off[int(np.nanargmin(d))] = False
+    return off
+
+
 def zone_cells(grid: np.ndarray, shape: DefensiveShape) -> np.ndarray:
     x, y = grid[:, 0], grid[:, 1]
     inside = (y >= shape.block_y[0]) & (y <= shape.block_y[1])
@@ -151,15 +169,18 @@ def space_from_arrays(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndar
     dp, dv = orient(def_pos, side), orient(def_vel, side)
     b = orient(ball, side)
 
+    shape = defensive_shape(dp, def_gk, float(b[0]))
+    offside = offside_attackers(ap, b, shape.offside_line, params.offside_margin)
+    ap = np.where(offside[:, None], np.nan, ap)
+
     control = pitch_control(ap, av, dp, dv, b, grid, def_gk=def_gk, params=params)
     reach = pass_reachability(b, dp, dv, grid, params)
     value = np.maximum(xt_value(grid) - xt_value(b[None])[0], 0.0)
     xspace = control.attack * reach * value
-    shape = defensive_shape(dp, def_gk, float(b[0]))
     zone = zone_cells(grid, shape)
 
     cell_area = PITCH_LENGTH * PITCH_WIDTH / len(grid)
     totals = {"total": float(xspace.sum() * cell_area), "best": float(xspace.max())}
     for i, name in enumerate(ZONES):
         totals[name] = float(xspace[zone == i].sum() * cell_area)
-    return FrameSpace(frame, side, control, reach, value, xspace, zone, shape, totals)
+    return FrameSpace(frame, side, control, reach, value, xspace, zone, shape, offside, totals)

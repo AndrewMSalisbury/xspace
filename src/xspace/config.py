@@ -34,6 +34,10 @@ class PhysicsParams:
     max_int_time: float = 10.0  # s
     convergence_tol: float = 0.01
     lane_samples: int = 12  # points sampled along a pass to test interception
+    # Attackers more than this far beyond the offside line can't receive a pass, so they get
+    # no pitch control (level is onside; the margin absorbs ~0.5 m tracking noise).
+    # Set to float('inf') to switch offside off.
+    offside_margin: float = 0.5  # m
 
 
 DEFAULT_PARAMS = PhysicsParams()

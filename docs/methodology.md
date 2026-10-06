@@ -143,7 +143,23 @@ Line positions are medians.
 | in front | x ≤ mid line |
 
 The legal offside line (second-deepest defender, incl. GK; not behind halfway or the ball) is
-stored separately.
+stored separately, and it is applied to the attackers: see *Offside* below.
+
+### Offside
+
+Attackers more than `offside_margin` (0.5 m) beyond the offside line are left out of pitch
+control for that frame. They can't legally receive a pass played now, so the space they would
+own goes to the next player, usually a defender. Level counts as onside, and the margin absorbs
+tracking noise (~0.5 m). The player nearest the ball (within 3 m) is never offside. Offside
+attackers still matter through the defenders they hold deep, which the defenders' positions
+already reflect, so a frame's xSpace reads as "space reachable by a pass played right now".
+`n_offside` records how many were left out (timeline and action rows). Set pieces where offside
+doesn't apply (throw-ins, corners, goal kicks) are already excluded.
+
+Check: on 4 matches, only ~1% of completed passes had a receiver more than 0.5 m beyond our
+line at the release frame, so the line matches what the referees saw. Before this rule,
+10–17% of computed frames had an offside attacker, and in those frames the attackers'
+behind-space was overstated by about 2× (total by ~25–30%).
 
 ## 7. Aggregation
 
@@ -229,7 +245,8 @@ dominated by best cells near the six-yard box, where borrowed xT is very high.
   Intensity). Real defences cover for each other.
 - **Ground passes only**: lofted balls over the line aren't modelled, which undercounts "behind"
   space. Planned: a second, slower, higher trajectory that can't be intercepted mid-flight.
-- **Offside** is not yet applied to receivers.
+- **Offside** is a hard cut at 0.5 m beyond the line; a soft weighting by P(offside) given
+  tracking noise is a Phase 4 option.
 - **Long passes**: reachability is too pessimistic beyond ~25 m (see section 9 results).
 - **Fixed physical parameters** for every player; could be fit per player from tracking data.
 - **Set pieces**: corners and free kicks pack the box, so defensive lines are meaningless there.

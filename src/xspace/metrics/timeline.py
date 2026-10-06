@@ -59,6 +59,7 @@ METRICS = (
     "compactness",  # back line − mid line, m
     "ball_x", "ball_y", "ball_xt",
     "n_att", "n_def",  # players on the pitch
+    "n_offside",  # attackers left out as offside
 )
 
 
@@ -111,6 +112,7 @@ def compute_chunk(chunk: FrameChunk, cell_size: float,
             "ball_x": ball[0], "ball_y": ball[1], "ball_xt": xt_value(ball[None])[0],
             "n_att": (~np.isnan(att_pos[i, :, 0])).sum(),
             "n_def": (~np.isnan(def_pos[i, :, 0])).sum(),
+            "n_offside": fs.offside.sum(),
         }
         for k, v in row.items():
             out[k][i] = v
