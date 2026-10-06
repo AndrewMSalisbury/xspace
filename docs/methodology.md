@@ -37,8 +37,17 @@ Every tunable setting (physics, grids, sampling, paths) lives in `src/xspace/con
   - IDSSE event clocks are off by −1.2 to +1.3 s, in either direction, and differ between the
     halves of one match, so offsets must be estimated per period. After the shift, all 7
     matches have a median actor–ball distance of 1.5–2.6 m (J03WMX: 5.4 m → 1.7 m), but only
-    52–62% of on-ball events are within 3 m. DFL event timing is noisy per event, so a per-event refinement (ETSY-style,
-    Van Roy et al. 2021) is a candidate improvement.
+    52–62% of on-ball events are within 3 m: DFL event timing is noisy per event (± 1 s).
+  - **Release frames** (`refine_release_frames`, IDSSE only; in the spirit of ETSY, Van Roy
+    et al. 2021): for passes, crosses, shots and clearances, search ± 2 s around the synced
+    frame for the kick: the ball within 2 m of the actor, then the biggest jump in the ball's
+    speed away from the actor (next 0.32 s vs previous 0.32 s, counting only movement away,
+    so receptions and the flight don't qualify), with a 1 m/s-per-second penalty for shifting.
+    Releases stay in event order. Stored as `release_frame`; `frame` (and so possession labels
+    and timelines) is unchanged. Across the 7 matches, the share of passes whose ball heads
+    toward the recorded end location goes from 48–57% to 77–87%, and the share with the
+    passer within 2 m of the ball from 50–64% to 88–96%. Run on PFF as a check, it lands
+    within 2 frames of PFF's tagged frame for 87–91% of passes; PFF keeps its tags.
 
 ### Phases of play
 
