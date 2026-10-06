@@ -18,6 +18,7 @@ RAW_DIR = DATA_DIR / "raw"
 PFF_DIR = RAW_DIR / "pff"
 CACHE_DIR = DATA_DIR / "processed"  # loaded-match pickles and reports
 TIMELINE_DIR = CACHE_DIR / "timeline"
+ACTIONS_DIR = CACHE_DIR / "actions"
 
 
 @dataclass(frozen=True)
@@ -52,13 +53,47 @@ DEFAULT_TIMELINE = TimelineConfig()
 FIGURE_CELL_SIZE = 1.0
 
 
+@dataclass(frozen=True)
+class ExploitationConfig:
+    """Phase 3 action metrics (metrics/exploitation.py). Thresholds are starting values."""
+
+    cell_size: float = 1.0  # m; fine enough to read xSpace at a single target point
+    skip_flags: int = 0b1111  # as TimelineConfig: release frames with these flags are skipped
+    # exploited = completed, into a cell in the top (1 - exploit_rank) of the frame's positive
+    # xSpace, worth at least exploit_min (≈ the median frame's best cell)
+    exploit_rank: float = 0.9
+    exploit_min: float = 0.005
+    # missed = the frame's best cell was big (≈ top 5% of frames) but the choice was in the
+    # bottom `missed_rank` of the frame's positive xSpace
+    missed_best_min: float = 0.02
+    missed_rank: float = 0.5
+    chunk_size: int = 64  # actions per parallel task
+
+
+DEFAULT_EXPLOITATION = ExploitationConfig()
+
+
 def settings_dict(physics: PhysicsParams = DEFAULT_PARAMS,
-                  timeline: TimelineConfig = DEFAULT_TIMELINE) -> dict:
-    """Every setting that affects timeline outputs, as plain JSON-able values."""
+                  timeline: TimelineConfig = DEFAULT_TIMELINE,
+                  exploitation: ExploitationConfig | None = None) -> dict:
+    """Every setting that affects timeline outputs (and, if given, action outputs), as plain
+    JSON-able values."""
+    import inspect
+
+    from xspace.io import sync
     from xspace.phases import possession, quality
     from xspace.value import xt
 
     xt_grid = (Path(xt.__file__).parent / "xt_12x8.json").read_bytes()
+    extra = {}
+    if exploitation is not None:
+        refine = inspect.signature(sync.refine_release_frames).parameters
+        extra = {
+            "exploitation": {k: v for k, v in asdict(exploitation).items()
+                             if k != "chunk_size"},
+            "release_frames": {k: v.default for k, v in refine.items()
+                               if v.default is not inspect.Parameter.empty},
+        }
     return {
         "physics": asdict(physics),
         "timeline": {k: v for k, v in asdict(timeline).items() if k != "chunk_size"},
@@ -74,6 +109,7 @@ def settings_dict(physics: PhysicsParams = DEFAULT_PARAMS,
             "max_player_speed": quality.MAX_PLAYER_SPEED,
         },
         "xt_grid_sha256": hashlib.sha256(xt_grid).hexdigest()[:12],
+        **extra,
     }
 
 

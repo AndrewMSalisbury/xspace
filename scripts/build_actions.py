@@ -1,0 +1,68 @@
+"""Build Phase 3 action metrics (one row per open-play pass / cross / carry) for whole matches.
+
+    uv run python scripts/build_actions.py --source all
+    uv run python scripts/build_actions.py --source idsse --match J03WMX --force
+
+Writes data/processed/actions/{source}_{match}.parquet, stamped like the timelines (git SHA and
+a hash of every setting, including ExploitationConfig and the release-frame refinement).
+Up-to-date files are skipped unless --force.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import time
+from concurrent.futures import ProcessPoolExecutor
+
+from xspace.config import (
+    ACTIONS_DIR,
+    DEFAULT_EXPLOITATION,
+    DEFAULT_PARAMS,
+    params_hash,
+    settings_dict,
+)
+from xspace.metrics.exploitation import actions_metadata, build_actions
+from xspace.metrics.timeline import read_metadata, write_timeline
+from xspace.pipeline import match_ids, prepare_match
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--source", default="idsse", choices=["idsse", "pff", "all"])
+    ap.add_argument("--match", nargs="+", default=["all"])
+    ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1),
+                    help="processes computing actions")
+    ap.add_argument("--force", action="store_true", help="rebuild up-to-date files")
+    args = ap.parse_args()
+
+    sources = ["idsse", "pff"] if args.source == "all" else [args.source]
+    jobs = [(s, m) for s in sources
+            for m in (match_ids(s) if args.match == ["all"] else args.match)]
+    current = params_hash(settings_dict(DEFAULT_PARAMS, exploitation=DEFAULT_EXPLOITATION))
+
+    start = time.perf_counter()
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        for i, (source, match_id) in enumerate(jobs, 1):
+            path = ACTIONS_DIR / f"{source}_{match_id}.parquet"
+            if (not args.force and path.exists()
+                    and read_metadata(path).get("params_hash") == current):
+                print(f"[{i}/{len(jobs)}] {source} {match_id}: up to date")
+                continue
+            t0 = time.perf_counter()
+            try:
+                pm = prepare_match(source, match_id)
+                t1 = time.perf_counter()
+                df = build_actions(pm.match, pm.events, pm.phases, pm.flags, executor=pool)
+            except Exception as e:  # keep going; report the failure
+                print(f"[{i}/{len(jobs)}] {source} {match_id}: FAILED {type(e).__name__}: {e}")
+                continue
+            write_timeline(df, path, actions_metadata(source, pm.match))
+            ok = int((df["status"] == "ok").sum())
+            print(f"[{i}/{len(jobs)}] {source} {match_id}: {ok}/{len(df)} actions computed, "
+                  f"prepare {t1 - t0:.0f}s, compute {time.perf_counter() - t1:.0f}s", flush=True)
+    print(f"done in {(time.perf_counter() - start) / 60:.1f} min")
+
+
+if __name__ == "__main__":
+    main()
