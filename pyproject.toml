@@ -23,6 +23,7 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "ipykernel>=6.29",
+    "tabulate>=0.10.0",
 ]
 
 [build-system]
