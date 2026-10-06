@@ -16,6 +16,7 @@ import argparse
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 
 from xspace.config import DEFAULT_PARAMS, DEFAULT_TIMELINE, TIMELINE_DIR, params_hash, settings_dict
 from xspace.metrics.timeline import (
@@ -42,7 +43,8 @@ def main() -> None:
     current = params_hash(settings_dict(DEFAULT_PARAMS, DEFAULT_TIMELINE))
 
     start = time.perf_counter()
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+    pool = ProcessPoolExecutor(max_workers=args.workers)
+    try:
         for i, (source, match_id) in enumerate(jobs, 1):
             path = TIMELINE_DIR / f"{source}_{match_id}.parquet"
             if (not args.force and path.exists()
@@ -53,7 +55,16 @@ def main() -> None:
             try:
                 pm = prepare_match(source, match_id)
                 t1 = time.perf_counter()
-                df = build_timeline(pm.match, pm.phases, pm.flags, executor=pool)
+                try:
+                    df = build_timeline(pm.match, pm.phases, pm.flags, executor=pool)
+                except BrokenProcessPool:
+                    # A worker died (on Windows, e.g. WinError 6 at start-up or low memory): a
+                    # broken pool fails every later task, so replace it and retry once.
+                    print(f"[{i}/{len(jobs)}] {source} {match_id}: worker pool broke; retrying",
+                          flush=True)
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    pool = ProcessPoolExecutor(max_workers=args.workers)
+                    df = build_timeline(pm.match, pm.phases, pm.flags, executor=pool)
             except Exception as e:  # keep going; report the failure
                 print(f"[{i}/{len(jobs)}] {source} {match_id}: FAILED {type(e).__name__}: {e}")
                 continue
@@ -62,6 +73,8 @@ def main() -> None:
             ok = int((df["status"] == "ok").sum())
             print(f"[{i}/{len(jobs)}] {source} {match_id}: {ok}/{len(df)} frames computed, "
                   f"prepare {t1 - t0:.0f}s, compute {time.perf_counter() - t1:.0f}s", flush=True)
+    finally:
+        pool.shutdown()
     print(f"done in {(time.perf_counter() - start) / 60:.1f} min")
 
 
