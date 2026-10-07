@@ -9,7 +9,7 @@ Last updated: 2026-10-06. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 |---|---|
 | Branches | PR #1 (Phase 1) merged. **PR #2** (`phase2-timeline`, Phase 2) open into `main`. `phase3-exploitation` is branched from it: merge #2 first (as a merge commit, not squash), then open the Phase 3 PR. |
 | Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics + moments notebook); possession-level metrics and video check remain |
-| Tests | 38 passing (`pytest`, ~5 s), ruff clean |
+| Tests | 39 passing (`pytest`, ~5 s), ruff clean |
 | Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/` |
 
 ## What Phase 3 built so far
@@ -18,7 +18,7 @@ Last updated: 2026-10-06. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 |---|---|
 | `io/sync.py` | `refine_release_frames`: per-event release frame (the kick) for IDSSE, stored as `release_frame`. `frame` and everything Phases 1–2 built on it is unchanged. `synchronise(..., refine=True)`; `prepare_match` turns it on for IDSSE. |
 | `metrics/exploitation.py` | `build_actions`: one row per open-play pass / cross / carry, at the release frame on a 1 m grid: available / best / chosen xSpace, rank, decision gap, zone, xT gained, exploited / missed, space owner. |
-| `config.py` | `ExploitationConfig` (grid, thresholds), `ACTIONS_DIR`. Its settings join the params hash for action files only (timeline hash unchanged: `6365d21bbd14`). |
+| `config.py` | `ExploitationConfig` (grid, thresholds), `ACTIONS_DIR`. Its settings join the params hash for action files only Current hashes: timeline `89404c61b49c`, actions `d29ce1be84de`. |
 | `metrics/timeline.py` | `output_metadata` shared by timeline and action files. |
 | `scripts/build_actions.py` | Like `build_timeline.py`; all 71 matches in ~10 min. |
 | `notebooks/moments.ipynb` | Coverage, sanity checks, zones, teams / players, top 20 exploited / missed (IDSSE figures, PFF tables). |

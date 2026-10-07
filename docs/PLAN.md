@@ -384,7 +384,7 @@ Use PFF's `targetPlayerId` for intent; fall back to end location for IDSSE.
 ### Outcome so far (2026-10-06)
 
 All 71 matches: 68,464 open-play actions, 96–99% computed, 9.6 min build. The control model
-assigns the chosen space to the actual receiver 86% (PFF) / 77% (IDSSE) of the time. Exploited
+assigns the chosen space to the actual receiver 85% (PFF) / 77% (IDSSE) of the time. Exploited
 moments look right; missed moments lean on six-yard-box cells (high borrowed xT). Main finding:
 long passes are under-rated by reachability (55% completed where the model says ~unreachable),
 so rank-based ratings wait for Phase 4 calibration. Details in `methodology.md` section 9.

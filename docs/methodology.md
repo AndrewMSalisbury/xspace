@@ -195,9 +195,10 @@ arrays, and a parallel run equals the serial run exactly (tested).
 
 From `notebooks/timeline_sanity.ipynb`: 83–86% of sampled frames are computed (the rest are
 set-piece windows, and on PFF ~6% quality flags, mostly a missing ball). IDSSE and PFF give
-xSpace on the same scale (team-match median ≈ 1.2 xT·m²). After a turnover, space **behind** the
-defence rises for ~8 s and stays above restart possessions until ~15 s, and within each third
-transitions have more space behind and a higher, less compact line. *Total* xSpace isn't higher
+xSpace on the same scale (team-match median ≈ 1.15 xT·m²; 1.2 before the offside rule, which
+cut final-third space behind by 10–13%). After a turnover, space **behind** the defence rises
+for ~8 s and stays above restart possessions until ~15 s, and within each third transitions
+have more space behind and a higher, less compact line. *Total* xSpace isn't higher
 in transitions, because the team that just won the ball controls less of the pitch.
 
 ## 9. Exploitation: was the space used?
@@ -230,7 +231,9 @@ metric asks whether *valuable* space was used. Thresholds live in `ExploitationC
 ### First results (all 71 matches)
 
 From `notebooks/moments.ipynb`: 68,464 open-play actions, 96–99% computed. For completed passes
-the attacker owning the chosen cell is the actual receiver 86% of the time (PFF; 77% IDSSE).
+the attacker owning the chosen cell is the actual receiver 85% of the time (PFF; 77% IDSSE).
+Exploited: 1.1% (PFF) / 1.9% (IDSSE) of actions. Missed: 1.5% / 1.8%, down from 1.8% / 2.0%
+before the offside rule (section 6), which takes value out of best cells behind the line.
 39% of actions go into zero xSpace (backward or square; 92% completed). Completed actions into
 *low*-ranked positive space gain the most xT: they are long (median 32 m vs 12 m) ground
 passes, completed 55% of the time although the reach model rates them nearly unreachable. So
