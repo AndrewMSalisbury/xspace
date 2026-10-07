@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import pickle
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 import numpy as np
 from kloppy.domain import Orientation, TrackingDataset
 
+from xspace.config import CACHE_DIR, PFF_DIR  # noqa: F401  (re-exported)
+from xspace.constants import PITCH_LENGTH, PITCH_WIDTH
 from xspace.physics.kinematics import smooth_velocities
 
 
@@ -127,6 +128,37 @@ def assign_goalkeepers(match: MatchTracking) -> MatchTracking:
     return match
 
 
+def recentre_periods(match: MatchTracking) -> MatchTracking:
+    """Undo whole-pitch offsets in individual periods, in place, and return the match.
+
+    kloppy 3.19's PFF loader leaves extra-time periods translated by one pitch length and width
+    (x ≈ ±105, y ≈ ±68 m off) after its extra-time direction flip; keepers confirm it is a pure
+    shift, not a reflection. A period whose median ball / player position lies off the pitch is
+    moved back by whole pitch dimensions. Velocities are unaffected by a constant shift.
+    """
+    for p in np.unique(match.period):
+        rows = match.period == p
+        pts = np.concatenate([match.ball[rows][:, None], match.home_pos[rows],
+                              match.away_pos[rows]], axis=1)
+        if np.isnan(pts).all():
+            continue
+        shift = np.zeros(2)
+        for axis, size in ((0, PITCH_LENGTH), (1, PITCH_WIDTH)):
+            med = np.nanmedian(pts[..., axis])
+            if abs(med) > size / 2:
+                shift[axis] = -size * np.round(med / size)
+        if shift.any():
+            match.ball[rows] += shift
+            match.home_pos[rows] += shift
+            match.away_pos[rows] += shift
+    return match
+
+
+def _on_load(match: MatchTracking) -> MatchTracking:
+    """Derived fixes applied on every load, so cached pickles stay valid."""
+    return assign_goalkeepers(recentre_periods(match))
+
+
 def from_kloppy(dataset: TrackingDataset, match_id: str = "unknown") -> MatchTracking:
     """Convert a kloppy TrackingDataset (any provider) into a MatchTracking."""
     # Second Spectrum's system: metres, centre spot at (0, 0). Real pitch sizes vary slightly
@@ -155,7 +187,7 @@ def from_kloppy(dataset: TrackingDataset, match_id: str = "unknown") -> MatchTra
     _fix_goalkeepers(away, away_pos, attacks_positive_x=False)
 
     fps = float(dataset.metadata.frame_rate)
-    return assign_goalkeepers(MatchTracking(
+    return _on_load(MatchTracking(
         match_id=match_id,
         frame_rate=fps,
         period=period,
@@ -171,9 +203,6 @@ def from_kloppy(dataset: TrackingDataset, match_id: str = "unknown") -> MatchTra
     ))
 
 
-CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "processed"
-
-
 def load_idsse(match_id: str = "J03WMX", limit: int | None = None,
                use_cache: bool = True) -> MatchTracking:
     """Load one of the 7 open IDSSE Bundesliga matches (CC BY 4.0, Bassek et al. 2025).
@@ -185,7 +214,7 @@ def load_idsse(match_id: str = "J03WMX", limit: int | None = None,
     cache = CACHE_DIR / f"idsse_{match_id}.pkl"
     if use_cache and cache.exists():
         with cache.open("rb") as f:
-            match = assign_goalkeepers(pickle.load(f))
+            match = _on_load(pickle.load(f))
         return match if limit is None else _head(match, limit)
 
     ds = sportec.load_open_tracking_data(match_id=match_id, limit=limit, only_alive=True)
@@ -195,9 +224,6 @@ def load_idsse(match_id: str = "J03WMX", limit: int | None = None,
         with cache.open("wb") as f:
             pickle.dump(match, f, protocol=pickle.HIGHEST_PROTOCOL)
     return match
-
-
-PFF_DIR = Path(__file__).resolve().parents[3] / "data" / "raw" / "pff"
 
 
 def load_pff(match_id: str | int, limit: int | None = None,
@@ -212,7 +238,7 @@ def load_pff(match_id: str | int, limit: int | None = None,
     cache = CACHE_DIR / f"pff_{match_id}.pkl"
     if use_cache and cache.exists():
         with cache.open("rb") as f:
-            match = assign_goalkeepers(pickle.load(f))
+            match = _on_load(pickle.load(f))
         return match if limit is None else _head(match, limit)
 
     tracking = PFF_DIR / "Tracking Data" / f"{match_id}.jsonl.bz2"

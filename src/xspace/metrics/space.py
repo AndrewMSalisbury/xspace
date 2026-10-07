@@ -120,18 +120,35 @@ def zone_cells(grid: np.ndarray, shape: DefensiveShape) -> np.ndarray:
 
 
 def frame_space(match: MatchTracking, frame: int, grid: np.ndarray,
-                params: PhysicsParams = DEFAULT_PARAMS) -> FrameSpace | None:
-    """Expected Space for one frame, or None if possession or the ball is unknown."""
-    side = int(match.ball_owner[frame])
+                params: PhysicsParams = DEFAULT_PARAMS,
+                side: int | None = None) -> FrameSpace | None:
+    """Expected Space for one frame, or None if possession or the ball is unknown.
+
+    `side` is the team in possession (0 home, 1 away). It defaults to the tracking
+    `ball_owner`; pass `PhaseLabels.possession_side[frame]` for event-based possession.
+    """
+    side = int(match.ball_owner[frame]) if side is None else int(side)
     ball = match.ball[frame]
     if side < 0 or np.isnan(ball).any():
         return None
 
     att_pos, att_vel = match.team_arrays(side)
     def_pos, def_vel = match.team_arrays(1 - side)
-    def_gk = match.gk_at(1 - side, frame)
-    ap, av = orient(att_pos[frame], side), orient(att_vel[frame], side)
-    dp, dv = orient(def_pos[frame], side), orient(def_vel[frame], side)
+    return space_from_arrays(att_pos[frame], att_vel[frame], def_pos[frame], def_vel[frame],
+                             ball, match.gk_at(1 - side, frame), side, grid, params, frame)
+
+
+def space_from_arrays(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndarray,
+                      def_vel: np.ndarray, ball: np.ndarray, def_gk: int | None, side: int,
+                      grid: np.ndarray, params: PhysicsParams = DEFAULT_PARAMS,
+                      frame: int = -1) -> FrameSpace:
+    """Expected Space from one frame's arrays in pitch coordinates (home attacks +x).
+
+    Roster-shaped (P, 2) positions / velocities, NaN for players off the pitch. Everything in
+    the result is in the attacking team's frame (attacking +x). `def_gk` is a roster slot.
+    """
+    ap, av = orient(att_pos, side), orient(att_vel, side)
+    dp, dv = orient(def_pos, side), orient(def_vel, side)
     b = orient(ball, side)
 
     control = pitch_control(ap, av, dp, dv, b, grid, def_gk=def_gk, params=params)
