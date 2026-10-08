@@ -1,12 +1,14 @@
-"""Build Phase 3 possession metrics (one row per possession) for whole matches.
+"""Build Phase 3 roll-ups for whole matches: possessions (one row per possession) and players
+(one row per player: minutes, own actions, credit for the space they held).
 
     uv run python scripts/build_possessions.py --source all
     uv run python scripts/build_possessions.py --source idsse --match J03WMX --force
 
 Needs the match's timeline and action files, built with the current settings (run
-build_timeline.py and build_actions.py first). Writes data/processed/possessions/
-{source}_{match}.parquet, stamped like them. No physics: each match takes about as long as
-loading it, so whole matches run in parallel (each worker holds one match in memory).
+build_timeline.py and build_actions.py first). Writes data/processed/possessions/ and
+data/processed/players/{source}_{match}.parquet, stamped like them. No physics: each match
+takes about as long as loading it, so whole matches run in parallel (each worker holds one
+match in memory).
 """
 
 from __future__ import annotations
@@ -19,11 +21,13 @@ from xspace.config import (
     ACTIONS_DIR,
     DEFAULT_EXPLOITATION,
     DEFAULT_PARAMS,
+    PLAYERS_DIR,
     POSSESSIONS_DIR,
     TIMELINE_DIR,
     params_hash,
     settings_dict,
 )
+from xspace.metrics.players import build_players
 from xspace.metrics.possessions import (
     build_possessions,
     possessions_metadata,
@@ -41,7 +45,10 @@ def build_one(source: str, match_id: str) -> str:
     df = build_possessions(pm.match, pm.events, pm.phases, timeline, actions)
     write_timeline(df, POSSESSIONS_DIR / f"{source}_{match_id}.parquet",
                    possessions_metadata(source, pm.match))
-    return f"{len(df)} possessions, {int(df['shot'].sum())} with a shot"
+    players = build_players(pm.match, actions)
+    write_timeline(players, PLAYERS_DIR / f"{source}_{match_id}.parquet",
+                   possessions_metadata(source, pm.match))
+    return f"{len(df)} possessions, {int(df['shot'].sum())} with a shot; {len(players)} players"
 
 
 def main() -> None:
@@ -70,8 +77,9 @@ def main() -> None:
                  if not (d / name).exists() or read_metadata(d / name).get("params_hash") != h]
         if stale:
             print(f"{source} {match_id}: SKIPPED, {' and '.join(stale)} missing or out of date")
-        elif (not args.force and (POSSESSIONS_DIR / name).exists()
-              and read_metadata(POSSESSIONS_DIR / name).get("params_hash") == current):
+        elif not args.force and all(
+                (d / name).exists() and read_metadata(d / name).get("params_hash") == current
+                for d in (POSSESSIONS_DIR, PLAYERS_DIR)):
             print(f"{source} {match_id}: up to date")
         else:
             todo.append((source, match_id))

@@ -20,6 +20,7 @@ CACHE_DIR = DATA_DIR / "processed"  # loaded-match pickles and reports
 TIMELINE_DIR = CACHE_DIR / "timeline"
 ACTIONS_DIR = CACHE_DIR / "actions"
 POSSESSIONS_DIR = CACHE_DIR / "possessions"
+PLAYERS_DIR = CACHE_DIR / "players"
 
 
 @dataclass(frozen=True)
