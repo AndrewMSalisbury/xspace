@@ -1,4 +1,6 @@
-"""Validation tasks V1 and V3 from the ablation files (scripts/build_ablations.py).
+"""Validation tasks V1 and V3 from the ablation files (scripts/build_ablations.py), and V4
+(split-half stability of team metrics) from the possession files (scripts/build_possessions.py:
+whatever physics those were built with).
 
     uv run python scripts/validate.py            # calibrated physics
     uv run python scripts/validate.py --default  # config.py physics
@@ -18,9 +20,10 @@ import json
 import numpy as np
 import pandas as pd
 
-from xspace.config import VALIDATION_DIR
+from xspace.config import POSSESSIONS_DIR, VALIDATION_DIR
+from xspace.metrics.timeline import read_metadata
 from xspace.validation.passes import TRAJECTORIES, PassSet
-from xspace.validation.report import v1_scores, v3_scores
+from xspace.validation.report import v1_scores, v3_scores, v4_split_half
 
 
 def load(ab_dir, kind: str) -> pd.DataFrame:
@@ -68,6 +71,17 @@ def main() -> None:
             df = v3_scores(frames, train, test, target)
             out[f"v3_{name}_{target}"] = df.to_dict(orient="records")
             print(f"\n## V3 {target}, {name}\n\n" + df.round(4).to_markdown(index=False))
+    parts = []
+    for f in sorted(POSSESSIONS_DIR.glob("pff_*.parquet")):
+        meta, d = read_metadata(f), pd.read_parquet(f)
+        names = np.array([meta["home"], meta["away"]])
+        d["match_id"] = meta["match_id"]
+        d["team"], d["opponent"] = names[d["team_side"]], names[1 - d["team_side"]]
+        parts.append(d)
+    df = v4_split_half(pd.concat(parts, ignore_index=True))
+    out["v4_pff"] = df.to_dict(orient="records")
+    print("\n## V4, PFF possessions\n\n" + df.round(3).to_markdown(index=False))
+
     (VALIDATION_DIR / f"validation{tag}.json").write_text(json.dumps(out, indent=1))
 
 

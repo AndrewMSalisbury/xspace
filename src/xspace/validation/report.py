@@ -96,3 +96,53 @@ def v3_scores(frames: pd.DataFrame, train: np.ndarray, test: np.ndarray,
     df = pd.DataFrame(rows)
     df["log_loss_gain_pct"] = 100 * (1 - df["test_log_loss"] / df["test_log_loss"].iloc[0])
     return df
+
+
+# --- V4: is the team signal stable? ---------------------------------------------------------
+
+V4_METRICS = {
+    # name: (column, weight); see _weighted
+    "xspace": ("xspace_mean", "n_ok"),  # time-weighted mean xSpace in possession
+    "peak": ("xspace_max", None),  # mean peak xSpace per possession
+    "exploit_rate": ("n_exploited", "n_actions"),  # exploited actions / actions
+}
+
+
+def _weighted(df: pd.DataFrame, col: str, weight: str | None) -> float:
+    ok = df[col].notna()
+    if weight is None:
+        return float(df.loc[ok, col].mean())
+    if weight == "n_actions":  # a rate: Σ exploited / Σ actions
+        return float(df[col].sum() / max(df[weight].sum(), 1))
+    w = df.loc[ok, weight]
+    return float((df.loc[ok, col] * w).sum() / max(w.sum(), 1))
+
+
+def v4_split_half(poss: pd.DataFrame, min_matches: int = 3) -> pd.DataFrame:
+    """Odd vs even possessions (per team per match, in time order): the correlation of each
+    team metric between the halves, with the Spearman-Brown reliability 2r / (1 + r).
+
+    At team-match level a team's "created" is its opponent's "conceded", so only created is
+    reported. Per team over the tournament (teams with at least `min_matches`), both are: what
+    a team created in possession, and what it conceded when its opponents had the ball.
+    `poss` needs `match_id`, `team` (in possession), `opponent` and the possession columns.
+    """
+    poss = poss.sort_values(["match_id", "team", "start_frame"]).copy()
+    poss["half"] = poss.groupby(["match_id", "team"]).cumcount() % 2
+    n_matches = poss.groupby("team")["match_id"].nunique()
+    rows = []
+    for level, keys, sides in (("team-match", ["match_id"], (("created", "team"),)),
+                               ("team", [], (("created", "team"), ("conceded", "opponent")))):
+        for side, who in sides:
+            for name, (col, w) in V4_METRICS.items():
+                g = (poss.groupby([*keys, who, "half"])
+                     .apply(lambda d, c=col, w=w: _weighted(d, c, w), include_groups=False)
+                     .unstack("half"))
+                if level == "team":
+                    g = g[n_matches.reindex(g.index).to_numpy() >= min_matches]
+                g = g.dropna()
+                with np.errstate(invalid="ignore", divide="ignore"):  # constant halves: NaN
+                    r = float(np.corrcoef(g[0], g[1])[0, 1]) if len(g) > 2 else np.nan
+                rows.append({"level": level, "metric": name, "side": side, "n": len(g),
+                             "r": r, "reliability": 2 * r / (1 + r)})
+    return pd.DataFrame(rows)

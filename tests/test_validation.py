@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from xspace.config import DEFAULT_PARAMS
@@ -211,3 +212,22 @@ def test_at_bounds_flags_pinned_parameters():
                           pm.Trajectory("air", 15.0, 0.5, 1.0))
     assert cal.at_bounds(model) == {"ball_speed": "upper", "reaction_time": "lower",
                                     "intercept_factor": "upper"}  # default 1.0
+
+
+def test_split_half_recovers_a_stable_team_signal():
+    from xspace.validation.report import v4_split_half
+
+    rng = np.random.default_rng(7)
+    rows = []
+    teams = [f"t{i}" for i in range(8)]
+    level = dict(zip(teams, np.linspace(0.5, 3.0, 8), strict=True))
+    for m in range(12):
+        a, b = teams[m % 8], teams[(m + 3) % 8]
+        for k in range(200):
+            team, opp = (a, b) if k % 2 else (b, a)
+            rows.append({"match_id": str(m), "team": team, "opponent": opp, "start_frame": k,
+                         "xspace_mean": level[team] + rng.normal(0, 0.1), "n_ok": 10,
+                         "xspace_max": level[team] * 2, "n_exploited": 0, "n_actions": 3})
+    out = v4_split_half(pd.DataFrame(rows))
+    x = out[(out["metric"] == "xspace") & (out["side"] == "created")]
+    assert (x["r"] > 0.95).all()
