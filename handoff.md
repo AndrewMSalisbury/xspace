@@ -58,8 +58,11 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 1. **Review and merge the possessions / players PR** (merge commit, not squash).
 2. **Reachability for long passes** (above): Phase 4, before ratings.
 3. **Thresholds** for `exploited` / `missed` are starting values (≈ 1–2% of actions each).
-4. **Eye test against video**: sample top / bottom PFF moments via `videoUrl` (the notebook
-   lists them). Needs a human.
+4. **Eye test against video** (needs a human): `scripts/eye_test.py` writes
+   `data/processed/eye_test/checklist.md` (gitignored: it quotes PFF data) with 8 exploited,
+   8 missed and 4 control moments, each with the PFF film-room link, the video time to seek to
+   (checked against the game clock) and the model's claim in words. Tick right / wrong /
+   unsure; results go into methodology.md and close Phase 3.
 5. **PFF 3845 (Qatar)** shows up again among the top missed moments: far side often empty
    (estimated players). Phase 4's broadcast-vs-optical comparison.
 6. Carried over: web skeleton not started; re-download PFF 10510 / 10511; tune set-piece /
@@ -68,5 +71,6 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 
 ## Next steps
 
-1. **Video eye test** (needs a human), then close Phase 3.
+1. **Video eye test**: fill in `data/processed/eye_test/checklist.md` (see open issue 4), then
+   close Phase 3.
 2. Then Phase 4 (validation and calibration), starting with long-pass reachability.

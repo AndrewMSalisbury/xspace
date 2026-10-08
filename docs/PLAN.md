@@ -383,6 +383,7 @@ Use PFF's `targetPlayerId` for intent; fall back to end location for IDSSE.
 - [x] Runner credit: per-player match table with space held / received (`metrics/players.py`,
   written by `scripts/build_possessions.py`). Results in `methodology.md` section 11.
 - [ ] Eye test against video (PFF `videoUrl`) for a sample of top / bottom moments.
+  Checklist: `scripts/eye_test.py` → `data/processed/eye_test/checklist.md` (20 moments).
 
 ### Outcome so far (2026-10-06)
 
