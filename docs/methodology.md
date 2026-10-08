@@ -273,6 +273,32 @@ differ in how much they concede: from 0.96 xT·m² per possession (Spain) to 1.4
 Netherlands) among World Cup teams with at least 3 matches, and conceded xSpace correlates with
 shots conceded per possession (r = 0.45).
 
+## 11. Players: space held
+
+`metrics/players.py` gives one row per player per match, from the action file. Minutes count
+live-ball frames only, so "per 90" below means per 90 *live* minutes (a World Cup match has
+about 55–60). Each player gets their own on-ball numbers (actions, exploited, missed, xT gained,
+mean decision gap) and two kinds of off-ball credit:
+
+- **space received**: completed team-mate actions into a cell this player owned (largest
+  pitch-control share), whether or not they were the receiver, and the xSpace there;
+- **space held**: team-mate actions whose *best* cell (≥ 0.005, the `exploit_min`) this player
+  owned, how often the ball went into it (`found`), and how often the action was `missed`.
+
+This counts moments; it doesn't say whether the player's run *created* the space (the
+"freeze the runner" counterfactual stays a v2 idea).
+
+### First results (all 71 matches)
+
+Space held per 90 orders the positions sensibly: strikers 44–48 (IDSSE / PFF), wingers 28–48,
+attacking midfielders 22–29, full-backs 9–15, central midfielders ~10, centre-backs ~3,
+goalkeepers 0. The ball goes into the held space 15–24% of the time. Among PFF players with at
+least 270 live minutes the leaders are Julián Álvarez (68 per 90), Olivier Giroud, Andrej
+Kramarić, Kylian Mbappé, Ivan Perišić and Cody Gakpo, with Denzel Dumfries and Nahuel Molina
+the top defenders. The rate is stable within a player (split-half r = 0.85 over 31 players with
+two halves of at least 135 minutes), though much of that is position; a within-position check
+needs more minutes per player than one tournament gives.
+
 ## Known limitations
 
 - **Independence**: defenders are treated as acting independently (same caveat as Pressing
@@ -292,8 +318,7 @@ shots conceded per possession (r = 0.45).
 ## Roadmap
 
 1. ~~**Match timeline**~~ — done (section 8).
-2. ~~**Exploited vs. available**~~ — done (sections 9–10). Next: off-ball runners, threshold
-   tuning by inspection.
+2. ~~**Exploited vs. available**~~ — done (sections 9–11). Next: threshold tuning by inspection.
 3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
    and xG in the next 10 s? Compare against plain pitch control and OBSO as baselines.
 4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).

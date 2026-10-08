@@ -47,7 +47,7 @@ uv run python scripts/demo_frame.py --frame 3000     # render docs/img/demo_fram
 uv run python scripts/export_frame.py --frame 3000   # export a frame for the web app
 uv run python scripts/build_timeline.py --source all # xSpace at 5 Hz for every match
 uv run python scripts/build_actions.py --source all  # was the space used? one row per pass/carry
-uv run python scripts/build_possessions.py --source all  # one row per possession
+uv run python scripts/build_possessions.py --source all  # per possession and per player
 
 cd web && npm install && npm run dev                 # http://localhost:5173
 ```

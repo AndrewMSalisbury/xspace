@@ -8,9 +8,9 @@ Last updated: 2026-10-08. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 | | |
 |---|---|
 | Branches | PR #1 (Phase 1) and PR #2 (Phase 2) merged. **Phase 3 PR** (#3) open from `phase3-exploitation` into `main`; `phase3-possessions` is stacked on it (local). |
-| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics, moments notebook, possession metrics); runner credit and video check remain |
-| Tests | 42 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/`; 71 possession files in `data/processed/possessions/` |
+| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics, moments notebook, possession metrics, runner credit); video check remains |
+| Tests | 44 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/`; 71 possession and 71 player files in `data/processed/possessions/`, `players/` |
 
 ## What Phase 3 built so far
 
@@ -22,7 +22,8 @@ Last updated: 2026-10-08. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 | `metrics/timeline.py` | `output_metadata` shared by timeline and action files. |
 | `scripts/build_actions.py` | Like `build_timeline.py`; all 71 matches in ~10 min. |
 | `metrics/possessions.py` | `build_possessions`: one row per possession from the timeline + action files + events: start / end type, mean / peak / integrated xSpace, time to peak and to first exploit, final third / box / shot / goal. |
-| `scripts/build_possessions.py` | Whole matches in parallel (3 workers); all 71 in < 1 min. Skips matches whose timeline / action files are stale. |
+| `metrics/players.py` | `build_players`: one row per player per match: live minutes, own actions, space received (owned the chosen cell) and space held (owned a team-mate's best cell; found / ignored). |
+| `scripts/build_possessions.py` | Writes possession and player files. Whole matches in parallel (3 workers); all 71 in < 1 min. Skips matches whose timeline / action files are stale. |
 | `notebooks/moments.ipynb` | Coverage, sanity checks, zones, teams / players, top 20 exploited / missed (IDSSE figures, PFF tables). |
 
 ```python
@@ -67,5 +68,5 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 
 ## Next steps
 
-1. **Runner credit**: aggregate `owner_id` over high-xSpace targets → "space occupied" per player.
+1. **Video eye test** (needs a human), then close Phase 3.
 2. Then Phase 4 (validation and calibration), starting with long-pass reachability.
