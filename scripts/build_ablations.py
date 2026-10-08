@@ -3,7 +3,8 @@
     uv run python scripts/build_ablations.py            # calibrated physics (calibration.json)
     uv run python scripts/build_ablations.py --default  # the physics in config.py
 
-Per match, writes data/processed/validation/ablations/{source}_{match}_{frames,passes}.parquet:
+Per match, writes data/processed/validation/ablations[_default]/
+{source}_{match}_{frames,passes}.parquet:
 V3 frames sampled at --hz in open play, with danger labels; V1 passes from the pass dataset
 (scripts/build_pass_set.py), in the same order.
 """
@@ -54,7 +55,7 @@ def main() -> None:
         fitted = json.loads((VALIDATION_DIR / "calibration.json").read_text())["fitted"]
         params = model_from_dict(fitted).physics()
     print(params)
-    out_dir = VALIDATION_DIR / "ablations"
+    out_dir = VALIDATION_DIR / ("ablations_default" if args.default else "ablations")
     out_dir.mkdir(parents=True, exist_ok=True)
     cell = DEFAULT_TIMELINE.cell_size
 

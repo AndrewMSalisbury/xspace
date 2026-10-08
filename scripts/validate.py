@@ -1,6 +1,7 @@
 """Validation tasks V1 and V3 from the ablation files (scripts/build_ablations.py).
 
-    uv run python scripts/validate.py
+    uv run python scripts/validate.py            # calibrated physics
+    uv run python scripts/validate.py --default  # config.py physics
 
 Uses the same match split as the calibration (calibration.json): models are fitted on the PFF
 training matches and scored on the PFF test matches and on all IDSSE matches (another
@@ -10,6 +11,7 @@ data/processed/validation/validation.json.
 
 from __future__ import annotations
 
+import argparse
 import glob
 import json
 
@@ -20,20 +22,23 @@ from xspace.config import VALIDATION_DIR
 from xspace.validation.passes import TRAJECTORIES, PassSet
 from xspace.validation.report import v1_scores, v3_scores
 
-AB_DIR = VALIDATION_DIR / "ablations"
 
-
-def load(kind: str) -> pd.DataFrame:
-    files = sorted(glob.glob(str(AB_DIR / f"*_{kind}.parquet")))
+def load(ab_dir, kind: str) -> pd.DataFrame:
+    files = sorted(glob.glob(str(ab_dir / f"*_{kind}.parquet")))
     return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--default", action="store_true", help="ablations built with --default")
+    args = ap.parse_args()
+    tag = "_default" if args.default else ""
+    ab_dir = VALIDATION_DIR / f"ablations{tag}"
     cal = json.loads((VALIDATION_DIR / "calibration.json").read_text())
     train_ids, test_ids = set(cal["train_matches"]), set(cal["test_matches"])
     out = {}
 
-    passes = load("passes")
+    passes = load(ab_dir, "passes")
     ps = PassSet.concat([PassSet.load(VALIDATION_DIR / f"passes_{s}_{m}.npz")
                          for s, m in passes[["source", "match_id"]].drop_duplicates()
                          .itertuples(index=False)])
@@ -52,7 +57,7 @@ def main() -> None:
         out[f"v1_{name}"] = df.to_dict(orient="records")
         print(f"\n## V1, {name}\n\n" + df.round(3).to_markdown(index=False))
 
-    frames = load("frames")
+    frames = load(ab_dir, "frames")
     pff = (frames["source"] == "pff").to_numpy()
     train = pff & frames["match_id"].isin(train_ids).to_numpy()
     print(f"\nV3 frames: {len(frames)}; shot within 10 s {frames['shot10'].mean():.3f}, "
@@ -63,7 +68,7 @@ def main() -> None:
             df = v3_scores(frames, train, test, target)
             out[f"v3_{name}_{target}"] = df.to_dict(orient="records")
             print(f"\n## V3 {target}, {name}\n\n" + df.round(4).to_markdown(index=False))
-    (VALIDATION_DIR / "validation.json").write_text(json.dumps(out, indent=1))
+    (VALIDATION_DIR / f"validation{tag}.json").write_text(json.dumps(out, indent=1))
 
 
 if __name__ == "__main__":
