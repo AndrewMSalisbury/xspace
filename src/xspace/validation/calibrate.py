@@ -124,7 +124,10 @@ def fit(ps: PassSet, start: PassModel, target: str = "intent", maxiter: int = 40
     log_bounds = None
     if bounds is not None:
         log_bounds = [tuple(np.log(bounds[f])) for f in (*PHYSICS_FIELDS, *AIR_FIELDS)]
-        x0 = np.clip(x0, [b[0] for b in log_bounds], [b[1] for b in log_bounds])
+        lo, hi = np.array(log_bounds).T
+        # Start a little inside the box: a simplex started on a bound collapses there.
+        margin = 0.05 * (hi - lo)
+        x0 = np.clip(x0, lo + margin, hi - margin)
     res = minimize(loss, x0, method="Nelder-Mead", callback=step, bounds=log_bounds,
                    options={"maxiter": maxiter, "xatol": 1e-3, "fatol": 1e-5, "adaptive": True})
     return start.with_vector(np.exp(res.x)), history
