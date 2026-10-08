@@ -92,3 +92,35 @@ def test_lone_deep_defender_is_not_the_back_line():
     assert shape.offside_line == pytest.approx(48)
     assert 33 <= shape.back_line <= 35
     assert shape.mid_line < 26
+
+
+def test_offside_attackers_get_no_control():
+    from dataclasses import replace
+
+    from xspace.config import DEFAULT_PARAMS
+    from xspace.metrics.space import offside_attackers, space_from_arrays
+
+    _, _, grid = make_grid(2.0)
+    # Defenders: back line at x = 20, keeper at 50 → offside line 20 (ball at 0).
+    dp = np.array([[50.0, 0.0], [20.0, -10.0], [20.0, 10.0], [10.0, 0.0]])
+    # Attackers: carrier at the ball, one level (within the margin), one clearly offside.
+    ap = np.array([[0.0, 0.0], [20.3, 20.0], [32.0, 0.0]])
+    zeros_a, zeros_d = np.zeros_like(ap), np.zeros_like(dp)
+    ball = np.array([0.0, 0.0])
+
+    fs = space_from_arrays(ap, zeros_a, dp, zeros_d, ball, 0, 0, grid)
+    assert fs.offside.tolist() == [False, False, True]
+    off = replace(DEFAULT_PARAMS, offside_margin=float("inf"))
+    no_rule = space_from_arrays(ap, zeros_a, dp, zeros_d, ball, 0, 0, grid, off)
+    assert not no_rule.offside.any()
+
+    near = np.argmin(np.linalg.norm(grid - [32.0, 0.0], axis=1))
+    assert no_rule.control.attack[near] > 0.8  # he'd own the space around him ...
+    assert fs.control.attack[near] < 0.2  # ... but he's offside, so the defence does
+    assert fs.totals["behind"] < no_rule.totals["behind"]
+    # Offside players never own space: their rows are gone from the per-player shares.
+    assert fs.control.attack_players.shape[0] == 2
+
+    # The player on the ball is never offside, even a step ahead of it at the line.
+    carrier = np.array([[21.0, 0.0], [5.0, 5.0]])
+    assert not offside_attackers(carrier, np.array([20.0, 0.0]), 20.0, 0.5).any()

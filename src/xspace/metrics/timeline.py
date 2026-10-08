@@ -59,6 +59,7 @@ METRICS = (
     "compactness",  # back line − mid line, m
     "ball_x", "ball_y", "ball_xt",
     "n_att", "n_def",  # players on the pitch
+    "n_offside",  # attackers left out as offside
 )
 
 
@@ -111,6 +112,7 @@ def compute_chunk(chunk: FrameChunk, cell_size: float,
             "ball_x": ball[0], "ball_y": ball[1], "ball_xt": xt_value(ball[None])[0],
             "n_att": (~np.isnan(att_pos[i, :, 0])).sum(),
             "n_def": (~np.isnan(def_pos[i, :, 0])).sum(),
+            "n_offside": fs.offside.sum(),
         }
         for k, v in row.items():
             out[k][i] = v
@@ -186,7 +188,12 @@ def build_timeline(match: MatchTracking, phases: PhaseLabels, flags: np.ndarray,
 def timeline_metadata(source: str, match: MatchTracking,
                       config: TimelineConfig = DEFAULT_TIMELINE,
                       params: PhysicsParams = DEFAULT_PARAMS, **extra) -> dict[str, str]:
-    settings = settings_dict(params, config)
+    return output_metadata(source, match, settings_dict(params, config), **extra)
+
+
+def output_metadata(source: str, match: MatchTracking, settings: dict,
+                    **extra) -> dict[str, str]:
+    """Parquet metadata for a per-match output: identity, git SHA, settings and their hash."""
     return {
         "source": source,
         "match_id": match.match_id,

@@ -28,7 +28,8 @@ class PreparedMatch:
 def prepare_match(source: str, match_id: str) -> PreparedMatch:
     """Load, synchronise and label one match. Sync problems are reported, not raised."""
     match = load_match(source, match_id)
-    events, report = synchronise(load_events(source, match_id), match, check=False)
+    events, report = synchronise(load_events(source, match_id), match, check=False,
+                                 refine=source == "idsse")
     remove_sent_off_players(match, events)
     return PreparedMatch(source, match, events, report, label_phases(match, events),
                          quality_flags(match))

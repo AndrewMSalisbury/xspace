@@ -37,8 +37,17 @@ Every tunable setting (physics, grids, sampling, paths) lives in `src/xspace/con
   - IDSSE event clocks are off by −1.2 to +1.3 s, in either direction, and differ between the
     halves of one match, so offsets must be estimated per period. After the shift, all 7
     matches have a median actor–ball distance of 1.5–2.6 m (J03WMX: 5.4 m → 1.7 m), but only
-    52–62% of on-ball events are within 3 m. DFL event timing is noisy per event, so a per-event refinement (ETSY-style,
-    Van Roy et al. 2021) is a candidate improvement.
+    52–62% of on-ball events are within 3 m: DFL event timing is noisy per event (± 1 s).
+  - **Release frames** (`refine_release_frames`, IDSSE only; in the spirit of ETSY, Van Roy
+    et al. 2021): for passes, crosses, shots and clearances, search ± 2 s around the synced
+    frame for the kick: the ball within 2 m of the actor, then the biggest jump in the ball's
+    speed away from the actor (next 0.32 s vs previous 0.32 s, counting only movement away,
+    so receptions and the flight don't qualify), with a 1 m/s-per-second penalty for shifting.
+    Releases stay in event order. Stored as `release_frame`; `frame` (and so possession labels
+    and timelines) is unchanged. Across the 7 matches, the share of passes whose ball heads
+    toward the recorded end location goes from 48–57% to 77–87%, and the share with the
+    passer within 2 m of the ball from 50–64% to 88–96%. Run on PFF as a check, it lands
+    within 2 frames of PFF's tagged frame for 87–91% of passes; PFF keeps its tags.
 
 ### Phases of play
 
@@ -134,7 +143,23 @@ Line positions are medians.
 | in front | x ≤ mid line |
 
 The legal offside line (second-deepest defender, incl. GK; not behind halfway or the ball) is
-stored separately.
+stored separately, and it is applied to the attackers: see *Offside* below.
+
+### Offside
+
+Attackers more than `offside_margin` (0.5 m) beyond the offside line are left out of pitch
+control for that frame. They can't legally receive a pass played now, so the space they would
+own goes to the next player, usually a defender. Level counts as onside, and the margin absorbs
+tracking noise (~0.5 m). The player nearest the ball (within 3 m) is never offside. Offside
+attackers still matter through the defenders they hold deep, which the defenders' positions
+already reflect, so a frame's xSpace reads as "space reachable by a pass played right now".
+`n_offside` records how many were left out (timeline and action rows). Set pieces where offside
+doesn't apply (throw-ins, corners, goal kicks) are already excluded.
+
+Check: on 4 matches, only ~1% of completed passes had a receiver more than 0.5 m beyond our
+line at the release frame, so the line matches what the referees saw. Before this rule,
+10–17% of computed frames had an offside attacker, and in those frames the attackers'
+behind-space was overstated by about 2× (total by ~25–30%).
 
 ## 7. Aggregation
 
@@ -170,10 +195,52 @@ arrays, and a parallel run equals the serial run exactly (tested).
 
 From `notebooks/timeline_sanity.ipynb`: 83–86% of sampled frames are computed (the rest are
 set-piece windows, and on PFF ~6% quality flags, mostly a missing ball). IDSSE and PFF give
-xSpace on the same scale (team-match median ≈ 1.2 xT·m²). After a turnover, space **behind** the
-defence rises for ~8 s and stays above restart possessions until ~15 s, and within each third
-transitions have more space behind and a higher, less compact line. *Total* xSpace isn't higher
+xSpace on the same scale (team-match median ≈ 1.15 xT·m²; 1.2 before the offside rule, which
+cut final-third space behind by 10–13%). After a turnover, space **behind** the defence rises
+for ~8 s and stays above restart possessions until ~15 s, and within each third transitions
+have more space behind and a higher, less compact line. *Total* xSpace isn't higher
 in transitions, because the team that just won the ball controls less of the pitch.
+
+## 9. Exploitation: was the space used?
+
+`build_actions` (`src/xspace/metrics/exploitation.py`; CLI `scripts/build_actions.py`) gives one
+row per open-play pass, cross and carry. At the action's **release frame** (section 1; refined
+per event for IDSSE) it computes the frame's xSpace on a **1 m grid** for the acting team and
+compares it with the point the ball was sent to:
+
+| Column | Meaning |
+|---|---|
+| `available`, per zone | frame total xSpace (as in the timeline) |
+| `best` (+ x, y, zone) | the frame's best cell |
+| `chosen` (+ x, y, zone) | xSpace at the chosen point's cell; `chosen_zone` is the zone targeted |
+| `chosen_rank` | share of the frame's positive-xSpace cells worth less than the chosen one |
+| `decision_gap` | `best − chosen` (≥ 0) |
+| `xt_gained` | xT(end) − xT(origin) if completed, −xT(origin) if lost |
+| `exploited` | completed, `chosen_rank` ≥ 0.9 and `chosen` ≥ 0.005 |
+| `missed` | `best` ≥ 0.02 (≈ top 5% of timeline frames) and `chosen_rank` < 0.5 |
+| `owner_id`, `best_owner_id` | attacker with the largest pitch-control share at the chosen / best cell |
+
+The **chosen point** (`chosen_source`) is the end location for completed actions; for failed
+PFF passes, the intended target (`targetPlayerId`) projected along their velocity for the
+ball's flight time; otherwise the ball at the next event, which for a cut-out pass is where it
+was intercepted (so it understates the intent). xSpace counts only forward value
+(section 5), so backward and square passes score `chosen = 0`; that is a choice, not a bug: the
+metric asks whether *valuable* space was used. Thresholds live in `ExploitationConfig`
+(`config.py`) and are starting values; they join the params hash for action files only.
+
+### First results (all 71 matches)
+
+From `notebooks/moments.ipynb`: 68,464 open-play actions, 96–99% computed. For completed passes
+the attacker owning the chosen cell is the actual receiver 85% of the time (PFF; 77% IDSSE).
+Exploited: 1.1% (PFF) / 1.9% (IDSSE) of actions. Missed: 1.5% / 1.8%, down from 1.8% / 2.0%
+before the offside rule (section 6), which takes value out of best cells behind the line.
+39% of actions go into zero xSpace (backward or square; 92% completed). Completed actions into
+*low*-ranked positive space gain the most xT: they are long (median 32 m vs 12 m) ground
+passes, completed 55% of the time although the reach model rates them nearly unreachable. So
+reachability is too pessimistic for long passes (fixed 15 m/s ball, ground lanes only) and
+`chosen_rank` currently favours short, safe progressions; calibrating reach against observed
+completion is the first Phase 4 task. Exploited moments look right; missed moments are
+dominated by best cells near the six-yard box, where borrowed xT is very high.
 
 ## Known limitations
 
@@ -181,7 +248,9 @@ in transitions, because the team that just won the ball controls less of the pit
   Intensity). Real defences cover for each other.
 - **Ground passes only**: lofted balls over the line aren't modelled, which undercounts "behind"
   space. Planned: a second, slower, higher trajectory that can't be intercepted mid-flight.
-- **Offside** is not yet applied to receivers.
+- **Offside** is a hard cut at 0.5 m beyond the line; a soft weighting by P(offside) given
+  tracking noise is a Phase 4 option.
+- **Long passes**: reachability is too pessimistic beyond ~25 m (see section 9 results).
 - **Fixed physical parameters** for every player; could be fit per player from tracking data.
 - **Set pieces**: corners and free kicks pack the box, so defensive lines are meaningless there.
   These phases need to be filtered out (or modelled separately) using event data.
@@ -192,8 +261,8 @@ in transitions, because the team that just won the ball controls less of the pit
 ## Roadmap
 
 1. ~~**Match timeline**~~ — done (section 8).
-2. **Exploited vs. available** — link to events: value actually gained by the next pass/carry,
-   and the *decision gap* (best reachable option − chosen option).
+2. ~~**Exploited vs. available**~~ — done (section 9). Next: off-ball runners, possession-level
+   metrics, threshold tuning by inspection.
 3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
    and xG in the next 10 s? Compare against plain pitch control and OBSO as baselines.
 4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).

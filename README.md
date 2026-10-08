@@ -46,6 +46,7 @@ uv run pytest                                        # tests
 uv run python scripts/demo_frame.py --frame 3000     # render docs/img/demo_frame.png
 uv run python scripts/export_frame.py --frame 3000   # export a frame for the web app
 uv run python scripts/build_timeline.py --source all # xSpace at 5 Hz for every match
+uv run python scripts/build_actions.py --source all  # was the space used? one row per pass/carry
 
 cd web && npm install && npm run dev                 # http://localhost:5173
 ```

@@ -181,3 +181,43 @@ def test_sent_off_goalkeeper_is_removed_and_replaced():
     assert np.isnan(match.home_pos[match.timestamp >= 4.0, 0]).all()
     assert match.gk_at(0, match.n_frames - 1) == 10
     assert match.gk_at(0, int(4.5 * FPS)) is None  # between the card and the replacement
+
+
+def two_pass_match() -> MatchTracking:
+    """h1 dribbles at 3 m/s, passes at 2 s (15 m/s across); h2 receives at 3 s, dribbles and
+    passes back at 5 s."""
+    match = line_match(7.0)
+    t = match.timestamp
+    match.home_pos[:] = np.nan
+    h1 = np.stack([3.0 * np.minimum(t, 2.0), np.zeros_like(t)], 1)
+    h2 = np.stack([6.0 + 3.0 * np.clip(t - 3.0, 0, 2.0), np.full_like(t, 15.0)], 1)
+    match.home_pos[:, 1], match.home_pos[:, 2] = h1, h2
+    ball = np.where((t < 2.0)[:, None], h1, 0.0)
+    flight = (t >= 2.0) & (t < 3.0)
+    ball[flight] = [6.0, 0.0] + np.outer(t[flight] - 2.0, [0.0, 15.0])
+    ball[(t >= 3.0) & (t < 5.0)] = h2[(t >= 3.0) & (t < 5.0)]
+    back = t >= 5.0
+    ball[back] = [12.0, 15.0] + np.outer(t[back] - 5.0, [-6.0, -7.5])
+    match.ball = ball
+    return match
+
+
+def test_refine_release_frames_finds_the_kick():
+    from xspace.io.sync import refine_release_frames
+
+    match = two_pass_match()
+    # Event clocks are noisy per event: one stamped late, one early.
+    ev = attach_frames(passes_at(np.array([2.9, 4.3]), [1, 2]), match)
+    release = refine_release_frames(ev, match)
+    kicks = np.array([2.0, 5.0]) * FPS
+    np.testing.assert_allclose(release, kicks, atol=1)
+    assert release[0] < release[1]
+
+    # Only release types move; and synchronise keeps `frame`, adding `release_frame`.
+    ev.loc[1, "type"] = "reception"
+    assert refine_release_frames(ev, match)[1] == ev.loc[1, "frame"]
+    synced, _ = synchronise(passes_at(np.array([2.9, 4.3]), [1, 2]), match, check=False,
+                            refine=True)
+    assert synced["release_frame"].tolist() != synced["frame"].tolist()
+    plain, _ = synchronise(passes_at(np.array([2.9, 4.3]), [1, 2]), match, check=False)
+    assert plain["release_frame"].tolist() == plain["frame"].tolist()
