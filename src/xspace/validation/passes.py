@@ -44,6 +44,7 @@ class PassSet:
     event_id: np.ndarray  # (N,) str
     type: np.ndarray  # (N,) str: pass / cross
     frame: np.ndarray  # (N,) release frame
+    team_side: np.ndarray  # (N,) passing team: 0 home, 1 away
     success: np.ndarray  # (N,) float: 1, 0
     trajectory: np.ndarray  # (N,) int8 index into TRAJECTORIES
     height: np.ndarray  # (N,) str: raw ball height at contact ('' if none)
@@ -161,7 +162,8 @@ def build_pass_set(source: str, match: MatchTracking, events: pd.DataFrame, flag
     return PassSet(
         source=np.full(n, source), match_id=np.full(n, str(match.match_id)),
         event_id=actions["event_id"].astype(str).to_numpy(),
-        type=actions["type"].astype(str).to_numpy(), frame=frames, success=success,
+        type=actions["type"].astype(str).to_numpy(), frame=frames, team_side=sides,
+        success=success,
         trajectory=np.array([trajectory_code(h or None) for h in peaks], dtype=np.int8),
         height=heights, high_point=peaks, ball=ball, end=end_o,
         end_source=np.array([CHOSEN_SOURCES[s] for s in end_source]),

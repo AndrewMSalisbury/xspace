@@ -70,11 +70,15 @@ class ControlSurface:
 def pitch_control(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndarray,
                   def_vel: np.ndarray, ball: np.ndarray, grid: np.ndarray,
                   def_gk: int | None = None,
-                  params: PhysicsParams = DEFAULT_PARAMS) -> ControlSurface:
+                  params: PhysicsParams = DEFAULT_PARAMS,
+                  flight: np.ndarray | None = None,
+                  lambda_scale: float = 1.0) -> ControlSurface:
     """Spearman pitch control for every grid cell simultaneously.
 
     Roster-shaped arrays may contain NaN rows for players not on the pitch; they are dropped.
     `def_gk` is the defending goalkeeper's roster index (gets a higher control rate).
+    `flight` (G,) overrides the ball's arrival time at each cell (default: a ground pass at
+    `ball_speed`); `lambda_scale` multiplies every player's control rate.
     """
     a_pos, a_vel, a_mask = _valid(att_pos, att_vel)
     d_pos, d_vel, d_mask = _valid(def_pos, def_vel)
@@ -84,12 +88,14 @@ def pitch_control(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndarray,
     # Both teams in one (N, G) block: attackers first, then defenders.
     tti = time_to_intercept(np.concatenate([a_pos, d_pos]), np.concatenate([a_vel, d_vel]),
                             grid, params)
-    ball_t = (np.sqrt(((grid - ball) ** 2).sum(axis=1)) / params.ball_speed).astype(f32)
+    if flight is None:
+        flight = np.sqrt(((grid - ball) ** 2).sum(axis=1)) / params.ball_speed
+    ball_t = np.asarray(flight).astype(f32)
     lam = np.r_[np.full(n_att, params.lambda_att),
                 np.full(len(d_pos), params.lambda_att * params.kappa_def)]
     if def_gk is not None and d_mask[def_gk]:
         lam[n_att + np.flatnonzero(d_mask).tolist().index(def_gk)] *= params.lambda_gk_factor
-    lam_dt = (lam * params.int_dt).astype(f32)[:, None]
+    lam_dt = (lam * params.int_dt * lambda_scale).astype(f32)[:, None]
 
     # Integrate from the ball's arrival in steps of int_dt. P(arrived) = 1 / (1 + E) with
     # E = exp(-k (t - tti)), so each step just multiplies E by exp(-k dt): no exp in the loop.

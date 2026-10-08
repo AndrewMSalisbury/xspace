@@ -27,6 +27,20 @@ PHYSICS_FIELDS = ("reaction_time", "max_speed", "tti_sigma", "lambda_att", "kapp
                   "ball_speed")
 AIR_FIELDS = ("air_speed", "air_time", "lambda_factor")
 AIR = TRAJECTORIES.index("air")
+# Physically plausible ranges. Unbounded, the fit runs away to an instant ball (ball_speed in
+# the thousands, reaction ~0) under which nothing is cut out and control is "is a defender
+# nearer the receiver than the receiver?": a good marking statistic, but not physics.
+BOUNDS = {
+    "reaction_time": (0.3, 1.0),  # s
+    "max_speed": (4.0, 7.0),  # m/s, an average top speed (sprints peak at 9-10)
+    "tti_sigma": (0.2, 1.0),  # s
+    "lambda_att": (1.0, 10.0),  # 1/s
+    "kappa_def": (0.5, 2.0),
+    "ball_speed": (10.0, 30.0),  # m/s, ground passes
+    "air_speed": (8.0, 30.0),  # m/s, horizontal
+    "air_time": (0.2, 2.0),  # s
+    "lambda_factor": (0.3, 1.5),
+}
 
 
 @dataclass(frozen=True)
@@ -43,6 +57,11 @@ class PassModel:
         physics = dict(zip(PHYSICS_FIELDS, map(float, v[:n]), strict=True))
         return PassModel(replace(self.params, **physics),
                          replace(self.air, **dict(zip(AIR_FIELDS, map(float, v[n:]), strict=True))))
+
+    def physics(self) -> PhysicsParams:
+        """The physics xSpace uses: these parameters with lofted passes switched on."""
+        return replace(self.params, air_speed=self.air.air_speed, air_time=self.air.air_time,
+                       air_lambda_factor=self.air.lambda_factor)
 
     def as_dict(self) -> dict[str, float]:
         return {**{f: getattr(self.params, f) for f in PHYSICS_FIELDS},
@@ -82,9 +101,11 @@ def split_matches(ps: PassSet, test_every: int = 4) -> tuple[np.ndarray, np.ndar
 
 
 def fit(ps: PassSet, start: PassModel, target: str = "intent", maxiter: int = 400,
-        callback=None) -> tuple[PassModel, list[float]]:
+        callback=None, bounds: dict[str, tuple[float, float]] | None = BOUNDS,
+        ) -> tuple[PassModel, list[float]]:
     """Maximum-likelihood fit of PHYSICS_FIELDS and AIR_FIELDS on `ps` (passes with a usable
-    target only). Returns the fitted model and the loss after each iteration."""
+    target only), within `bounds` (None: unbounded). Returns the fitted model and the loss
+    after each iteration."""
     y = ps.success
     history: list[float] = []
 
@@ -98,7 +119,12 @@ def fit(ps: PassSet, start: PassModel, target: str = "intent", maxiter: int = 40
         if callback is not None:
             callback(len(history), history[-1], start.with_vector(np.exp(logv)))
 
-    res = minimize(loss, np.log(start.vector()), method="Nelder-Mead", callback=step,
+    x0 = np.log(start.vector())
+    log_bounds = None
+    if bounds is not None:
+        log_bounds = [tuple(np.log(bounds[f])) for f in (*PHYSICS_FIELDS, *AIR_FIELDS)]
+        x0 = np.clip(x0, [b[0] for b in log_bounds], [b[1] for b in log_bounds])
+    res = minimize(loss, x0, method="Nelder-Mead", callback=step, bounds=log_bounds,
                    options={"maxiter": maxiter, "xatol": 1e-3, "fatol": 1e-5, "adaptive": True})
     return start.with_vector(np.exp(res.x)), history
 
@@ -129,6 +155,19 @@ def by_distance(ps: PassSet, p: np.ndarray,
             rows.append({"distance": f"{a:g}-{b:g} m", "n": int(m.sum()),
                          "observed": float(ps.success[m].mean()), "predicted": float(p[m].mean())})
     return pd.DataFrame(rows)
+
+
+def at_bounds(model: PassModel, bounds: dict[str, tuple[float, float]] = BOUNDS,
+              rtol: float = 0.01) -> dict[str, str]:
+    """Fitted values pinned (within rtol) to a bound: 'lower' or 'upper'."""
+    v = dict(zip((*PHYSICS_FIELDS, *AIR_FIELDS), model.vector(), strict=True))
+    out = {}
+    for f, (lo, hi) in bounds.items():
+        if v[f] <= lo * (1 + rtol):
+            out[f] = "lower"
+        elif v[f] >= hi * (1 - rtol):
+            out[f] = "upper"
+    return out
 
 
 def model_from_dict(d: dict) -> PassModel:

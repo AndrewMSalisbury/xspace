@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from xspace.config import DEFAULT_PARAMS
-from xspace.physics.pitch_control import pass_reachability, pitch_control
+from xspace.metrics.space import space_from_arrays
+from xspace.physics.pitch_control import make_grid, pass_reachability, pitch_control
 from xspace.validation import calibrate as cal
 from xspace.validation import pass_model as pm
 from xspace.validation.passes import MAX_PLAYERS, TRAJECTORIES, PassSet
@@ -32,7 +33,7 @@ def random_passes(n: int, seed: int = 0, n_players: int = 11) -> PassSet:
     return PassSet(
         source=np.full(n, "pff"), match_id=np.array([str(i % 8) for i in range(n)]),
         event_id=np.array([str(i) for i in range(n)]), type=np.full(n, "pass"),
-        frame=np.arange(n), success=(rng.random(n) < 0.8).astype(float),
+        frame=np.arange(n), team_side=np.zeros(n, int), success=(rng.random(n) < 0.8).astype(float),
         trajectory=(np.arange(n) % 3).astype(np.int8), height=np.full(n, ""),
         high_point=np.full(n, ""), ball=ball, end=end, end_source=np.full(n, "end"),
         att_pos=ap, att_vel=av, def_pos=dp, def_vel=dv, offside=offside,
@@ -140,3 +141,71 @@ def test_pass_set_round_trip(tmp_path):
     back = PassSet.load(tmp_path / "p.npz")
     np.testing.assert_array_equal(back.att_pos, ps.att_pos)
     assert list(back.event_id) == list(ps.event_id)
+
+
+def test_xspace_grid_uses_the_better_ball():
+    """space_from_arrays with lofted passes on agrees with the pass model's max(ground, air)
+    at the target cell (the grid is just the target points, so no cell rounding)."""
+    model = cal.PassModel(replace(DEFAULT_PARAMS, lane_combine="max"),
+                          pm.Trajectory("air", air_speed=14.0, air_time=0.6, lambda_factor=0.7))
+    ps = random_passes(25, seed=5)
+    ps.offside[:] = False  # space_from_arrays decides offside itself
+    best = cal.predict(ps, model, target="end", use_trajectory=False)
+    for i in range(len(ps)):
+        gk = int(ps.def_gk[i]) if ps.def_gk[i] >= 0 else None
+        fs = space_from_arrays(ps.att_pos[i], ps.att_vel[i], ps.def_pos[i], ps.def_vel[i],
+                               ps.ball[i], gk, 0, ps.end[i][None], model.physics())
+        if fs.offside.any():
+            continue
+        assert fs.receive[0] * fs.reach[0] == pytest.approx(best[i], abs=1e-5)
+        assert fs.receive_players[:, 0].sum() == pytest.approx(fs.receive[0], abs=1e-5)
+
+
+def test_air_off_leaves_xspace_unchanged():
+    ps = random_passes(3, seed=6)
+    grid = np.array([[10.0, 5.0], [30.0, -20.0], [45.0, 0.0]])
+    fs = space_from_arrays(ps.att_pos[0], ps.att_vel[0], ps.def_pos[0], ps.def_vel[0],
+                           ps.ball[0], None, 0, grid)
+    assert not fs.air.any()
+    np.testing.assert_array_equal(fs.receive, fs.control.attack)
+    np.testing.assert_allclose(fs.xspace, fs.control.attack * fs.reach * fs.value)
+
+
+def test_ablation_surfaces_and_scores():
+    from test_timeline import random_match
+
+    from xspace.validation import ablations as ab
+
+    match = random_match()
+    frames = np.array([0, 50, 100])
+    side = np.array([0, 1, 0])
+    end = np.array([[20.0, 5.0], [-20.0, 0.0], [np.nan, np.nan]])
+    params = replace(DEFAULT_PARAMS, lane_combine="max", air_speed=14.0, air_time=0.5)
+    out = ab.compute(ab.snapshots(match, frames, side, end), 2.0, params)
+    for s in ab.SURFACES:
+        assert np.all(out[f"total_{s}"] >= 0)
+        assert np.all((out[f"rank_{s}"][:2] >= 0) & (out[f"rank_{s}"][:2] <= 1))
+        assert np.isnan(out[f"rank_{s}"][2])  # no end point: a V3 frame
+        assert np.all(out[f"ll_{s}"][:2] <= 1e-9)
+        # β = 0 is the uniform baseline over the grid
+        np.testing.assert_allclose(out[f"ll_{s}"][:2, 0], -np.log(len(make_grid(2.0)[2])))
+    # Full xSpace is at least the ground-only version, cell by cell, so in total too.
+    assert np.all(out["total_xspace"] >= out["total_xspace_ground"] - 1e-9)
+
+
+def test_danger_labels():
+    from test_possessions import scripted
+
+    from xspace.validation import ablations as ab
+
+    match, ev, phases = scripted()
+    lab = ab.danger_labels(match, ev, phases, np.array([20, 100, 165, 175]))
+    # Home (frame 20) never shoots; away shoots at frame 170 from inside the home box.
+    assert list(lab["shot10"]) == [False, True, True, False]
+    assert list(lab["box10"][:3]) == [False, True, True]
+
+
+def test_at_bounds_flags_pinned_parameters():
+    model = cal.PassModel(replace(DEFAULT_PARAMS, ball_speed=30.0, reaction_time=0.3),
+                          pm.Trajectory("air", 15.0, 0.5, 1.0))
+    assert cal.at_bounds(model) == {"ball_speed": "upper", "reaction_time": "lower"}

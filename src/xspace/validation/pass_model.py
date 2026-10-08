@@ -231,6 +231,8 @@ def scores(y: np.ndarray, p: np.ndarray) -> dict[str, float]:
 
 def reliability(y: np.ndarray, p: np.ndarray, bins: int = 10) -> np.ndarray:
     """(bins, 3): mean prediction, observed rate and count per equal-width bin of p."""
+    ok = ~np.isnan(p)
+    y, p = y[ok], p[ok]
     idx = np.minimum((p * bins).astype(int), bins - 1)
     out = np.full((bins, 3), np.nan)
     for b in range(bins):

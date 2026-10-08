@@ -2,6 +2,7 @@
 
     uv run python scripts/calibrate.py            # fit, evaluate, write calibration.json
     uv run python scripts/calibrate.py --no-fit   # evaluate the saved fit only
+    uv run python scripts/calibrate.py --unbounded  # no bounds: calibration_unbounded.json
 
 Needs the pass dataset (scripts/build_pass_set.py). Writes
 data/processed/validation/calibration.json: fitted parameters, the train / test match split
@@ -23,14 +24,16 @@ from xspace.validation import calibrate as cal
 from xspace.validation import pass_model as pm
 from xspace.validation.passes import PassSet
 
-OUT = VALIDATION_DIR / "calibration.json"
-
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-fit", action="store_true")
     ap.add_argument("--maxiter", type=int, default=400)
+    ap.add_argument("--unbounded", action="store_true", help="fit without parameter bounds")
     args = ap.parse_args()
+    out = VALIDATION_DIR / ("calibration_unbounded.json" if args.unbounded
+                            else "calibration.json")
+    bounds = None if args.unbounded else cal.BOUNDS
 
     ps = PassSet.concat([PassSet.load(f)
                          for f in sorted(glob.glob(str(VALIDATION_DIR / "passes_*.npz")))])
@@ -41,7 +44,7 @@ def main() -> None:
     default = cal.PassModel(DEFAULT_PARAMS, pm.Trajectory("air", 15.0, 0.5, 1.0))
     lane_max = replace(default, params=replace(DEFAULT_PARAMS, lane_combine="max"))
     if args.no_fit:
-        fitted = cal.model_from_dict(json.loads(OUT.read_text())["fitted"])
+        fitted = cal.model_from_dict(json.loads(out.read_text())["fitted"])
         history = []
     else:
         t0 = time.perf_counter()
@@ -52,7 +55,7 @@ def main() -> None:
                       flush=True)
 
         fitted, history = cal.fit(ps.subset(train & (ps.target >= 0)), lane_max,
-                                  maxiter=args.maxiter, callback=report)
+                                  maxiter=args.maxiter, callback=report, bounds=bounds)
     models = {"default": default, "lane_max": lane_max, "fitted": fitted}
 
     held = ps.subset(test)
@@ -70,11 +73,14 @@ def main() -> None:
     print("\n== fitted, test, reliability (mean p, observed, n)\n" + np.array2string(
         rel, precision=3, suppress_small=True))
     print("\nfitted:", json.dumps(fitted.as_dict(), indent=1))
+    if bounds:
+        print("at bounds:", cal.at_bounds(fitted))
 
     VALIDATION_DIR.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({
+    out.write_text(json.dumps({
         "git_sha": git_sha(),
         "fitted": fitted.as_dict(), "start": lane_max.as_dict(),
+        "bounds": bounds, "at_bounds": cal.at_bounds(fitted) if bounds else {},
         "train_matches": sorted(set(ps.match_id[train]), key=int),
         "test_matches": sorted(set(ps.match_id[test]), key=int),
         "history": history,
@@ -82,7 +88,7 @@ def main() -> None:
         "by_distance": dist.to_dict(orient="records"),
         "reliability": rel.tolist(),
     }, indent=1))
-    print(f"wrote {OUT}")
+    print(f"wrote {out}")
 
 
 if __name__ == "__main__":
