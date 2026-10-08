@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 core done 2026-10-06 (event metrics + moments notebook); possession-level metrics and video check remain |
+| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 core done 2026-10-06 (event metrics + moments notebook), possession metrics 2026-10-08; runner credit and video check remain |
 
 ---
 
@@ -378,7 +378,8 @@ Use PFF's `targetPlayerId` for intent; fall back to end location for IDSSE.
   frame figures from IDSSE, World Cup moments as tables until PFF's terms are confirmed).
 - [x] Prerequisite: per-event release frames for IDSSE (`io.sync.refine_release_frames`).
 - [x] Space owner per action (`owner_id`, `best_owner_id`): the runner-credit ingredient.
-- [ ] Possession-level metrics (xSpace conceded per possession, time-to-exploit, box entry / shot).
+- [x] Possession-level metrics (`metrics/possessions.py`, `scripts/build_possessions.py`):
+  xSpace conceded per possession, time-to-exploit, box entry / shot. Results in `methodology.md` section 10.
 - [ ] Eye test against video (PFF `videoUrl`) for a sample of top / bottom moments.
 
 ### Outcome so far (2026-10-06)

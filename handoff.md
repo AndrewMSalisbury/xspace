@@ -1,16 +1,16 @@
 # Handoff — Xspace
 
-Last updated: 2026-10-06. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) and
+Last updated: 2026-10-08. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) and
 [docs/methodology.md](docs/methodology.md) (how everything is computed).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Branches | PR #1 (Phase 1) and PR #2 (Phase 2) merged. **Phase 3 PR** open from `phase3-exploitation` into `main`. |
-| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics + moments notebook); possession-level metrics and video check remain |
-| Tests | 39 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/` |
+| Branches | PR #1 (Phase 1) and PR #2 (Phase 2) merged. **Phase 3 PR** (#3) open from `phase3-exploitation` into `main`; `phase3-possessions` is stacked on it (local). |
+| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics, moments notebook, possession metrics); runner credit and video check remain |
+| Tests | 42 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/`; 71 possession files in `data/processed/possessions/` |
 
 ## What Phase 3 built so far
 
@@ -21,6 +21,8 @@ Last updated: 2026-10-06. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 | `config.py` | `ExploitationConfig` (grid, thresholds), `ACTIONS_DIR`. Its settings join the params hash for action files only Current hashes: timeline `89404c61b49c`, actions `d29ce1be84de`. |
 | `metrics/timeline.py` | `output_metadata` shared by timeline and action files. |
 | `scripts/build_actions.py` | Like `build_timeline.py`; all 71 matches in ~10 min. |
+| `metrics/possessions.py` | `build_possessions`: one row per possession from the timeline + action files + events: start / end type, mean / peak / integrated xSpace, time to peak and to first exploit, final third / box / shot / goal. |
+| `scripts/build_possessions.py` | Whole matches in parallel (3 workers); all 71 in < 1 min. Skips matches whose timeline / action files are stale. |
 | `notebooks/moments.ipynb` | Coverage, sanity checks, zones, teams / players, top 20 exploited / missed (IDSSE figures, PFF tables). |
 
 ```python
@@ -65,8 +67,5 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 
 ## Next steps
 
-1. **Possession-level metrics** (PLAN Phase 3): xSpace conceded per possession, time-to-exploit
-   after a turnover, max xSpace reached, box entry / shot at the end. Join timeline rows to
-   possessions via `possession_id`.
-2. **Runner credit**: aggregate `owner_id` over high-xSpace targets → "space occupied" per player.
-3. Then Phase 4 (validation and calibration), starting with long-pass reachability.
+1. **Runner credit**: aggregate `owner_id` over high-xSpace targets → "space occupied" per player.
+2. Then Phase 4 (validation and calibration), starting with long-pass reachability.
