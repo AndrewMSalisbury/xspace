@@ -21,6 +21,7 @@ TIMELINE_DIR = CACHE_DIR / "timeline"
 ACTIONS_DIR = CACHE_DIR / "actions"
 POSSESSIONS_DIR = CACHE_DIR / "possessions"
 PLAYERS_DIR = CACHE_DIR / "players"
+VALIDATION_DIR = CACHE_DIR / "validation"
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,10 @@ class PhysicsParams:
     max_int_time: float = 10.0  # s
     convergence_tol: float = 0.01
     lane_samples: int = 12  # points sampled along a pass to test interception
+    # How interception chances along a lane combine. "product": every (defender, lane point)
+    # pair is an independent chance, so a defender beside the lane counts once per sample.
+    # "max": each defender gets one chance, at their best point; defenders are independent.
+    lane_combine: str = "product"
     # Attackers more than this far beyond the offside line can't receive a pass, so they get
     # no pitch control (level is onside; the margin absorbs ~0.5 m tracking noise).
     # Set to float('inf') to switch offside off.

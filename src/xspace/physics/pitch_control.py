@@ -140,7 +140,8 @@ def pass_reachability(ball: np.ndarray, def_pos: np.ndarray, def_vel: np.ndarray
 
     Points are sampled along each straight passing lane; for each, a defender intercepts with
     logistic probability in (ball arrival time - defender time-to-intercept). Combined with
-    the Pressing Intensity rule P = 1 - prod(1 - p_i), then reach = 1 - P.
+    the Pressing Intensity rule P = 1 - prod(1 - p_i), then reach = 1 - P; the p_i are
+    per (defender, lane point) or, with `lane_combine="max"`, each defender's best point.
     """
     d_pos, d_vel, _ = _valid(def_pos, def_vel)
     if len(d_pos) == 0:
@@ -153,4 +154,6 @@ def pass_reachability(ball: np.ndarray, def_pos: np.ndarray, def_vel: np.ndarray
     # 1 - p_intercept = 1 - logistic(k (ball_t - tti)) = 1 / (1 + exp(k (ball_t - tti)))
     k = np.float32(_logistic_rate(params.tti_sigma))
     p_free = 1.0 / (1.0 + np.exp(np.minimum(k * (ball_t[None] - tti), _MAX_EXPONENT)))
+    if params.lane_combine == "max":
+        return np.prod(p_free.min(axis=2), axis=0).astype(np.float64)
     return np.prod(p_free, axis=(0, 2)).astype(np.float64)
