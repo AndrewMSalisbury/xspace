@@ -19,6 +19,7 @@ PFF_DIR = RAW_DIR / "pff"
 CACHE_DIR = DATA_DIR / "processed"  # loaded-match pickles and reports
 TIMELINE_DIR = CACHE_DIR / "timeline"
 ACTIONS_DIR = CACHE_DIR / "actions"
+POSSESSIONS_DIR = CACHE_DIR / "possessions"
 
 
 @dataclass(frozen=True)
