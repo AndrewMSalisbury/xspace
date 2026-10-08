@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from xspace.config import DEFAULT_PARAMS, UNCALIBRATED_PARAMS
 from xspace.metrics.space import ZONES, defensive_shape, zone_cells
 from xspace.physics.kinematics import smooth_velocities
 from xspace.physics.pitch_control import make_grid, pass_reachability, pitch_control
@@ -49,9 +50,15 @@ def test_nan_players_are_ignored():
 def test_defender_in_lane_blocks_pass():
     ball = np.array([0.0, 0.0])
     targets = np.array([[30.0, 0.0], [0.0, 30.0]])
-    reach = pass_reachability(ball, at(15, 0), STILL, targets)
+    # Every defender who gets there intercepts (the Phases 0-3 physics) ...
+    reach = pass_reachability(ball, at(15, 0), STILL, targets, UNCALIBRATED_PARAMS)
     assert reach[0] < 0.2  # straight through the defender
     assert reach[1] > 0.8  # open lane
+    # ... and calibrated, where one who gets there wins it intercept_factor of the time, so a
+    # single defender can never cut out more than that share.
+    reach = pass_reachability(ball, at(15, 0), STILL, targets)
+    assert 1 - DEFAULT_PARAMS.intercept_factor <= reach[0] < reach[1]
+    assert reach[1] > 0.99
 
 
 def test_xt_increases_towards_goal():

@@ -1,7 +1,7 @@
 """Ablation surfaces for validation tasks V1 and V3 (see xspace.validation.ablations).
 
-    uv run python scripts/build_ablations.py            # calibrated physics (calibration.json)
-    uv run python scripts/build_ablations.py --default  # the physics in config.py
+    uv run python scripts/build_ablations.py            # the physics in config.py (calibrated)
+    uv run python scripts/build_ablations.py --default  # UNCALIBRATED_PARAMS (Phases 0-3)
 
 Per match, writes data/processed/validation/ablations[_default]/
 {source}_{match}_{frames,passes}.parquet:
@@ -12,7 +12,6 @@ V3 frames sampled at --hz in open play, with danger labels; V1 passes from the p
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -20,12 +19,11 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from xspace.config import DEFAULT_PARAMS, DEFAULT_TIMELINE, VALIDATION_DIR
+from xspace.config import DEFAULT_PARAMS, DEFAULT_TIMELINE, UNCALIBRATED_PARAMS, VALIDATION_DIR
 from xspace.metrics.space import orient
 from xspace.metrics.timeline import frame_status, sample_frames
 from xspace.pipeline import match_ids, prepare_match
 from xspace.validation import ablations as ab
-from xspace.validation.calibrate import model_from_dict
 from xspace.validation.passes import PassSet
 
 CHUNK = 64
@@ -44,16 +42,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="all", choices=["idsse", "pff", "all"])
     ap.add_argument("--match", nargs="+", default=["all"])
-    ap.add_argument("--default", action="store_true", help="use config.py physics")
+    ap.add_argument("--default", action="store_true",
+                    help="use the uncalibrated Phases 0-3 physics")
     ap.add_argument("--hz", type=float, default=1.0, help="V3 frame sample rate")
     ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1))
     args = ap.parse_args()
 
-    if args.default:
-        params = DEFAULT_PARAMS
-    else:
-        fitted = json.loads((VALIDATION_DIR / "calibration.json").read_text())["fitted"]
-        params = model_from_dict(fitted).physics()
+    params = UNCALIBRATED_PARAMS if args.default else DEFAULT_PARAMS
     print(params)
     out_dir = VALIDATION_DIR / ("ablations_default" if args.default else "ablations")
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -26,13 +26,17 @@ VALIDATION_DIR = CACHE_DIR / "validation"
 
 @dataclass(frozen=True)
 class PhysicsParams:
-    reaction_time: float = 0.7  # s before a player can change course
-    max_speed: float = 5.0  # m/s, average max running speed
-    tti_sigma: float = 0.45  # s, uncertainty in arrival time (same sigma as Pressing Intensity)
-    lambda_att: float = 4.3  # 1/s, rate of gaining control once at the ball
-    kappa_def: float = 1.0  # defender advantage multiplier on lambda
+    """Defaults marked (fit) were fitted to 45k PFF pass outcomes (Phase 4, task V2:
+    scripts/calibrate.py, docs/validation.md) within physically plausible bounds; the others
+    are fixed. UNCALIBRATED_PARAMS keeps the earlier hand-set values."""
+
+    reaction_time: float = 0.43  # s before a player can change course (fit)
+    max_speed: float = 5.27  # m/s, average max running speed (fit)
+    tti_sigma: float = 0.49  # s, uncertainty in arrival time (fit)
+    lambda_att: float = 9.83  # 1/s, rate of gaining control once at the ball (fit)
+    kappa_def: float = 1.04  # defender advantage multiplier on lambda (fit)
     lambda_gk_factor: float = 3.0  # goalkeepers can handle the ball
-    ball_speed: float = 15.0  # m/s, average ground-pass speed
+    ball_speed: float = 25.8  # m/s, average ground-pass speed (fit)
     int_dt: float = 0.04  # s, integration step
     max_int_time: float = 10.0  # s
     convergence_tol: float = 0.01
@@ -40,17 +44,18 @@ class PhysicsParams:
     # How interception chances along a lane combine. "product": every (defender, lane point)
     # pair is an independent chance, so a defender beside the lane counts once per sample.
     # "max": each defender gets one chance, at their best point; defenders are independent.
-    lane_combine: str = "product"
+    lane_combine: str = "max"
     # Chance that a defender who reaches the lane in time actually cuts the ball out (it can
-    # still go through their legs, off a boot, ...). 1 = always.
-    intercept_factor: float = 1.0
+    # still go through their legs, off a boot, ...). 1 = always. The fitted value is low: it
+    # also absorbs tracking noise and that players rarely try lanes that are really shut.
+    intercept_factor: float = 0.152  # (fit)
     # Lofted passes: flight time air_time + distance / air_speed, can't be cut out in flight,
     # contested where they land with every player's control rate x air_lambda_factor. xSpace
     # takes, per cell, whichever of the ground and lofted ball is likelier to arrive.
     # air_speed = 0 means ground passes only.
-    air_speed: float = 0.0  # m/s, horizontal
-    air_time: float = 0.0  # s
-    air_lambda_factor: float = 1.0
+    air_speed: float = 20.8  # m/s, horizontal (fit)
+    air_time: float = 1.32  # s (fit)
+    air_lambda_factor: float = 1.0  # (fit: 1.002)
     # Attackers more than this far beyond the offside line can't receive a pass, so they get
     # no pitch control (level is onside; the margin absorbs ~0.5 m tracking noise).
     # Set to float('inf') to switch offside off.
@@ -58,6 +63,13 @@ class PhysicsParams:
 
 
 DEFAULT_PARAMS = PhysicsParams()
+# Phases 0-3 physics: Spearman's published values, ground passes only, every lane sample an
+# independent chance to intercept. Kept as the baseline the calibration is measured against.
+UNCALIBRATED_PARAMS = PhysicsParams(
+    reaction_time=0.7, max_speed=5.0, tti_sigma=0.45, lambda_att=4.3, kappa_def=1.0,
+    ball_speed=15.0, lane_combine="product", intercept_factor=1.0, air_speed=0.0,
+    air_time=0.0, air_lambda_factor=1.0,
+)
 
 
 @dataclass(frozen=True)

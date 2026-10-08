@@ -184,5 +184,9 @@ def test_fast_kernels_match_reference(frame):
     r = dp + dv * p.reaction_time
     tti = p.reaction_time + np.linalg.norm(lane[None] - r[:, None, None], axis=-1) / p.max_speed
     p_int = 1 / (1 + np.exp(-np.pi / np.sqrt(3) / p.tti_sigma * (ball_t[None] - tti)))
-    np.testing.assert_allclose(pass_reachability(ball, dp, dv, grid),
-                               np.prod(1 - p_int, axis=(0, 2)), atol=1e-5)
+    p_int = p_int * p.intercept_factor  # (defenders, cells, lane points)
+    if p.lane_combine == "max":  # one chance per defender, at their best lane point
+        expected = np.prod(1 - p_int.max(axis=2), axis=0)
+    else:  # every (defender, lane point) pair is a chance
+        expected = np.prod(1 - p_int, axis=(0, 2))
+    np.testing.assert_allclose(pass_reachability(ball, dp, dv, grid), expected, atol=1e-5)

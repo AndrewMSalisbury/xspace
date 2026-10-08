@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from xspace.config import DEFAULT_PARAMS
+from xspace.config import DEFAULT_PARAMS, UNCALIBRATED_PARAMS
 from xspace.metrics.space import space_from_arrays
 from xspace.physics.pitch_control import make_grid, pass_reachability, pitch_control
 from xspace.validation import calibrate as cal
@@ -63,7 +63,7 @@ def test_batched_model_matches_reference_physics(lane_combine, intercept):
 
 def test_lane_max_never_lowers_reach():
     ps = random_passes(50, seed=1)
-    prod = pm.predict(ps, DEFAULT_PARAMS).reach
+    prod = pm.predict(ps, replace(DEFAULT_PARAMS, lane_combine="product")).reach
     mx = pm.predict(ps, replace(DEFAULT_PARAMS, lane_combine="max")).reach
     assert np.all(mx >= prod - 1e-12)
     assert (mx > prod + 1e-3).any()
@@ -75,9 +75,10 @@ def test_one_defender_beside_lane_counts_once():
     ball = np.array([0.0, 0.0])
     target = np.array([[30.0, 0.0]])
     defender = np.array([[15.0, 6.0]])
-    params = replace(DEFAULT_PARAMS, lane_combine="max")
+    params = replace(UNCALIBRATED_PARAMS, lane_combine="max")
     r_max = pass_reachability(ball, defender, np.zeros((1, 2)), target, params)[0]
-    r_prod = pass_reachability(ball, defender, np.zeros((1, 2)), target)[0]
+    r_prod = pass_reachability(ball, defender, np.zeros((1, 2)), target,
+                               UNCALIBRATED_PARAMS)[0]
     assert r_prod < r_max < 1.0
 
 
@@ -167,7 +168,7 @@ def test_air_off_leaves_xspace_unchanged():
     ps = random_passes(3, seed=6)
     grid = np.array([[10.0, 5.0], [30.0, -20.0], [45.0, 0.0]])
     fs = space_from_arrays(ps.att_pos[0], ps.att_vel[0], ps.def_pos[0], ps.def_vel[0],
-                           ps.ball[0], None, 0, grid)
+                           ps.ball[0], None, 0, grid, replace(DEFAULT_PARAMS, air_speed=0.0))
     assert not fs.air.any()
     np.testing.assert_array_equal(fs.receive, fs.control.attack)
     np.testing.assert_allclose(fs.xspace, fs.control.attack * fs.reach * fs.value)
@@ -208,7 +209,7 @@ def test_danger_labels():
 
 
 def test_at_bounds_flags_pinned_parameters():
-    model = cal.PassModel(replace(DEFAULT_PARAMS, ball_speed=30.0, reaction_time=0.3),
+    model = cal.PassModel(replace(UNCALIBRATED_PARAMS, ball_speed=30.0, reaction_time=0.3),
                           pm.Trajectory("air", 15.0, 0.5, 1.0))
     assert cal.at_bounds(model) == {"ball_speed": "upper", "reaction_time": "lower",
                                     "intercept_factor": "upper"}  # default 1.0

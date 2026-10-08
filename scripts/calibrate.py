@@ -19,7 +19,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from xspace.config import DEFAULT_PARAMS, VALIDATION_DIR, git_sha
+from xspace.config import UNCALIBRATED_PARAMS, VALIDATION_DIR, git_sha
 from xspace.validation import calibrate as cal
 from xspace.validation import pass_model as pm
 from xspace.validation.passes import PassSet
@@ -43,8 +43,10 @@ def main() -> None:
     print(f"{len(ps)} passes; train {train.sum()} ({len(set(ps.match_id[train]))} matches), "
           f"test {test.sum()} ({len(set(ps.match_id[test]))} matches)")
 
-    default = cal.PassModel(DEFAULT_PARAMS, pm.Trajectory("air", 15.0, 0.5, 1.0))
-    lane_max = replace(default, params=replace(DEFAULT_PARAMS, lane_combine="max"))
+    # Baselines: the Phases 0-3 physics, then the same with one interception chance per
+    # defender. (Their lofted ball is only used for PFF passes tagged as lofted.)
+    default = cal.PassModel(UNCALIBRATED_PARAMS, pm.Trajectory("air", 15.0, 0.5, 1.0))
+    lane_max = replace(default, params=replace(UNCALIBRATED_PARAMS, lane_combine="max"))
     if args.no_fit:
         fitted = cal.model_from_dict(json.loads(out.read_text())["fitted"])
         history = []
