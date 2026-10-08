@@ -7,7 +7,7 @@ Last updated: 2026-10-08. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 
 | | |
 |---|---|
-| Branches | PR #1 (Phase 1) and PR #2 (Phase 2) merged. **Phase 3 PR** (#3) open from `phase3-exploitation` into `main`; `phase3-possessions` is stacked on it (local). |
+| Branches | PRs #1–#3 (Phases 1–2, Phase 3 action metrics) merged. **Possessions / players PR** open from `phase3-possessions` into `main`. |
 | Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics, moments notebook, possession metrics, runner credit); video check remains |
 | Tests | 44 passing (`pytest`, ~5 s), ruff clean |
 | Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/`; 71 possession and 71 player files in `data/processed/possessions/`, `players/` |
@@ -55,7 +55,7 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 
 ## Open issues
 
-1. **Review and merge the Phase 3 PR** (merge commit, not squash).
+1. **Review and merge the possessions / players PR** (merge commit, not squash).
 2. **Reachability for long passes** (above): Phase 4, before ratings.
 3. **Thresholds** for `exploited` / `missed` are starting values (≈ 1–2% of actions each).
 4. **Eye test against video**: sample top / bottom PFF moments via `videoUrl` (the notebook
