@@ -41,6 +41,9 @@ class PhysicsParams:
     # pair is an independent chance, so a defender beside the lane counts once per sample.
     # "max": each defender gets one chance, at their best point; defenders are independent.
     lane_combine: str = "product"
+    # Chance that a defender who reaches the lane in time actually cuts the ball out (it can
+    # still go through their legs, off a boot, ...). 1 = always.
+    intercept_factor: float = 1.0
     # Lofted passes: flight time air_time + distance / air_speed, can't be cut out in flight,
     # contested where they land with every player's control rate x air_lambda_factor. xSpace
     # takes, per cell, whichever of the ground and lofted ball is likelier to arrive.

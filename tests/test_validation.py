@@ -43,9 +43,10 @@ def random_passes(n: int, seed: int = 0, n_players: int = 11) -> PassSet:
     )
 
 
-@pytest.mark.parametrize("lane_combine", ["product", "max"])
-def test_batched_model_matches_reference_physics(lane_combine):
-    params = replace(DEFAULT_PARAMS, lane_combine=lane_combine)
+@pytest.mark.parametrize("lane_combine,intercept", [("product", 1.0), ("max", 1.0),
+                                                    ("max", 0.6)])
+def test_batched_model_matches_reference_physics(lane_combine, intercept):
+    params = replace(DEFAULT_PARAMS, lane_combine=lane_combine, intercept_factor=intercept)
     ps = random_passes(30)
     pred = pm.predict(ps, params)
     for i in range(len(ps)):
@@ -208,4 +209,5 @@ def test_danger_labels():
 def test_at_bounds_flags_pinned_parameters():
     model = cal.PassModel(replace(DEFAULT_PARAMS, ball_speed=30.0, reaction_time=0.3),
                           pm.Trajectory("air", 15.0, 0.5, 1.0))
-    assert cal.at_bounds(model) == {"ball_speed": "upper", "reaction_time": "lower"}
+    assert cal.at_bounds(model) == {"ball_speed": "upper", "reaction_time": "lower",
+                                    "intercept_factor": "upper"}  # default 1.0

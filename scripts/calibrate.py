@@ -30,6 +30,8 @@ def main() -> None:
     ap.add_argument("--no-fit", action="store_true")
     ap.add_argument("--maxiter", type=int, default=400)
     ap.add_argument("--unbounded", action="store_true", help="fit without parameter bounds")
+    ap.add_argument("--warm", action="store_true",
+                    help="start from the saved fit (as far as it goes) instead of the defaults")
     args = ap.parse_args()
     out = VALIDATION_DIR / ("calibration_unbounded.json" if args.unbounded
                             else "calibration.json")
@@ -54,7 +56,10 @@ def main() -> None:
                 print(f"  iter {i}: train log loss {loss:.4f} ({time.perf_counter() - t0:.0f}s)",
                       flush=True)
 
-        fitted, history = cal.fit(ps.subset(train & (ps.target >= 0)), lane_max,
+        start = lane_max
+        if args.warm:
+            start = cal.model_from_dict(json.loads(out.read_text())["fitted"])
+        fitted, history = cal.fit(ps.subset(train & (ps.target >= 0)), start,
                                   maxiter=args.maxiter, callback=report, bounds=bounds)
     models = {"default": default, "lane_max": lane_max, "fitted": fitted}
 

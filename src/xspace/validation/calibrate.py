@@ -24,7 +24,7 @@ from xspace.validation import pass_model as pm
 from xspace.validation.passes import TRAJECTORIES, PassSet
 
 PHYSICS_FIELDS = ("reaction_time", "max_speed", "tti_sigma", "lambda_att", "kappa_def",
-                  "ball_speed")
+                  "ball_speed", "intercept_factor")
 AIR_FIELDS = ("air_speed", "air_time", "lambda_factor")
 AIR = TRAJECTORIES.index("air")
 # Physically plausible ranges. Unbounded, the fit runs away to an instant ball (ball_speed in
@@ -37,6 +37,7 @@ BOUNDS = {
     "lambda_att": (1.0, 10.0),  # 1/s
     "kappa_def": (0.5, 2.0),
     "ball_speed": (10.0, 30.0),  # m/s, ground passes
+    "intercept_factor": (0.1, 1.0),
     "air_speed": (8.0, 30.0),  # m/s, horizontal
     "air_time": (0.2, 2.0),  # s
     "lambda_factor": (0.3, 1.5),
@@ -171,7 +172,7 @@ def at_bounds(model: PassModel, bounds: dict[str, tuple[float, float]] = BOUNDS,
 
 
 def model_from_dict(d: dict) -> PassModel:
-    params = replace(DEFAULT_PARAMS, **{f: d[f] for f in PHYSICS_FIELDS},
+    params = replace(DEFAULT_PARAMS, **{f: d[f] for f in PHYSICS_FIELDS if f in d},
                      lane_combine=d.get("lane_combine", DEFAULT_PARAMS.lane_combine))
     air = pm.Trajectory("air", d["air_speed"], d["air_time"], d["air_lambda_factor"])
     return PassModel(params, air)

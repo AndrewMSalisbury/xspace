@@ -135,6 +135,8 @@ def ground_reach(ps: PassSet, target: np.ndarray,
     tti = _tti(ps.def_pos, np.nan_to_num(ps.def_vel), lane, params)  # (N, P, S)
     k = _logistic_rate(params.tti_sigma)
     p_free = 1.0 / (1.0 + np.exp(np.minimum(k * (ball_t[:, None, :] - tti), _MAX_EXPONENT)))
+    if params.intercept_factor != 1.0:
+        p_free = 1.0 - params.intercept_factor * (1.0 - p_free)
     if params.lane_combine == "max":
         return p_free.min(axis=2).prod(axis=1)
     return p_free.prod(axis=(1, 2))

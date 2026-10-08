@@ -160,6 +160,8 @@ def pass_reachability(ball: np.ndarray, def_pos: np.ndarray, def_vel: np.ndarray
     # 1 - p_intercept = 1 - logistic(k (ball_t - tti)) = 1 / (1 + exp(k (ball_t - tti)))
     k = np.float32(_logistic_rate(params.tti_sigma))
     p_free = 1.0 / (1.0 + np.exp(np.minimum(k * (ball_t[None] - tti), _MAX_EXPONENT)))
+    if params.intercept_factor != 1.0:
+        p_free = 1.0 - params.intercept_factor * (1.0 - p_free)
     if params.lane_combine == "max":
         return np.prod(p_free.min(axis=2), axis=0).astype(np.float64)
     return np.prod(p_free, axis=(0, 2)).astype(np.float64)
