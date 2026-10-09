@@ -1,6 +1,7 @@
 """Fit the physics to where passes go and whether they arrive (see xspace.validation.joint).
 
     uv run python scripts/fit_joint.py
+    uv run python scripts/fit_joint.py --resume   # start from the last checkpoint
 
 Same match split as scripts/calibrate.py. Writes data/processed/validation/joint.json: the
 fitted parameters and β, the loss history, and held-out scores for the Phases 0-3 physics,
@@ -26,6 +27,7 @@ from xspace.validation import pass_model as pm
 from xspace.validation.passes import PassSet
 
 OUT = VALIDATION_DIR / "joint.json"
+CHECKPOINT = VALIDATION_DIR / "joint_checkpoint.json"  # best point so far, every 10 iterations
 
 
 def forward(ps: PassSet) -> np.ndarray:
@@ -49,7 +51,8 @@ def main() -> None:
     ap.add_argument("--n-test", type=int, default=3000, help="held-out destination passes")
     ap.add_argument("--cell", type=float, default=3.0)
     ap.add_argument("--maxiter", type=int, default=300)
-    ap.add_argument("--workers", type=int, default=min(14, os.cpu_count() or 1))
+    ap.add_argument("--workers", type=int, default=min(10, os.cpu_count() or 1))
+    ap.add_argument("--resume", action="store_true", help="start from the last checkpoint")
     args = ap.parse_args()
 
     ps = PassSet.concat([PassSet.load(f)
@@ -67,6 +70,11 @@ def main() -> None:
     start = cal.PassModel(replace(UNCALIBRATED_PARAMS, lane_combine="max",
                                   intercept_factor=0.9),
                           pm.Trajectory("air", 20.8, 1.32, 1.0))
+    beta0 = 3.0
+    if args.resume:
+        ck = json.loads(CHECKPOINT.read_text())
+        start, beta0 = cal.model_from_dict(ck["fitted"]), ck["beta"]
+        print(f"resuming from iteration {ck['iteration']} (loss {ck['loss']:.4f})")
     t0 = time.perf_counter()
 
     def report(i, loss, parts, model, beta):
@@ -74,10 +82,12 @@ def main() -> None:
             print(f"  iter {i}: loss {loss:.4f} (completion {parts[0]:.4f}, destination "
                   f"{parts[1]:.4f}), beta {beta:.2f} ({time.perf_counter() - t0:.0f}s)",
                   flush=True)
+            CHECKPOINT.write_text(json.dumps({"iteration": i, "loss": loss,
+                                              "fitted": model.as_dict(), "beta": beta}))
 
     with ProcessPoolExecutor(args.workers, initializer=joint.init_worker,
                              initargs=(dest,)) as pool:
-        model, beta, history = joint.fit_joint(success, len(dest), start, 3.0, pool,
+        model, beta, history = joint.fit_joint(success, len(dest), start, beta0, pool,
                                                args.cell, maxiter=args.maxiter,
                                                callback=report)
         print("\nfitted:", json.dumps({**model.as_dict(), "beta": beta}, indent=1))
