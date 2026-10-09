@@ -232,3 +232,20 @@ def test_split_half_recovers_a_stable_team_signal():
     out = v4_split_half(pd.DataFrame(rows))
     x = out[(out["metric"] == "xspace") & (out["side"] == "created")]
     assert (x["r"] > 0.95).all()
+
+
+def test_destination_ll_is_uniform_at_zero_beta_and_rewards_the_best_cell():
+    from xspace.validation import joint
+
+    ps = random_passes(4, seed=8)
+    ll0 = joint.destination_ll(np.arange(4), DEFAULT_PARAMS, 0.0, 5.0, ps)
+    np.testing.assert_allclose(ll0, -np.log(len(make_grid(5.0)[2])))
+    # Send every pass to its frame's best xSpace cell: a sharper softmax only helps.
+    grid = make_grid(5.0)[2]
+    for i in range(4):
+        fs = space_from_arrays(ps.att_pos[i], ps.att_vel[i], ps.def_pos[i], ps.def_vel[i],
+                               ps.ball[i], int(ps.def_gk[i]) if ps.def_gk[i] >= 0 else None,
+                               0, grid, DEFAULT_PARAMS)
+        ps.end[i] = grid[np.argmax(fs.xspace)]
+    sharp = joint.destination_ll(np.arange(4), DEFAULT_PARAMS, 20.0, 5.0, ps)
+    assert np.all(sharp > ll0)
