@@ -109,7 +109,7 @@ def passes_at(times: np.ndarray, players: list[int]) -> pd.DataFrame:
         "player_id": [f"h{p}" for p in players], "type": "pass", "setpiece": "open_play",
         "start_x": 5.0 * np.array(players), "start_y": 0.0, "end_x": np.nan, "end_y": np.nan,
         "target_player_id": None, "receiver_player_id": None, "success": None,
-        "outcome": None, "height": None, "lines_broken": None,
+        "outcome": None, "height": None, "high_point": None, "lines_broken": None,
     })
     return df.astype(EVENT_COLUMNS)
 

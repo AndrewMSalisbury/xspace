@@ -88,19 +88,35 @@ All 71 matches use a 105 × 68 m pitch, so per-stadium dimensions aren't needed 
 ## 2. Time to intercept
 
 Shared by every component, and the same quantity Pressing Intensity is built on. A player keeps
-moving on their current velocity for a reaction time (0.7 s), then runs straight at 5 m/s:
+moving on their current velocity for a reaction time (0.43 s), then runs straight at 5.27 m/s:
 
 ```
 r_react = r + v · t_react
 T(player → target) = t_react + |target − r_react| / v_max
 ```
 
+Every physics parameter marked "fitted" in sections 2–4 was fitted to 45k World Cup pass
+outcomes in Phase 4 ([validation.md](validation.md), V2). Phases 0–3 used Spearman's published
+values (reaction 0.7 s, 5 m/s, σ 0.45 s, λ 4.3 s⁻¹, ball 15 m/s); they are kept as
+`UNCALIBRATED_PARAMS`.
+
 ## 3. Pitch control
 
 Spearman (2018), following Shaw's implementation, vectorised over all cells at once. A player's
-probability of having arrived by time *t* is logistic in `t − T` (σ = 0.45 s). Control accumulates
-from the moment the ball arrives (ground pass at 15 m/s) at rate λ = 4.3 s⁻¹ (×3 for the
-defending goalkeeper) until attack + defence control ≥ 0.99, then is normalised to sum to 1.
+probability of having arrived by time *t* is logistic in `t − T` (σ = 0.49 s, fitted). Control
+accumulates from the moment the ball arrives (ground pass at 25.8 m/s, fitted) at rate
+λ = 9.83 s⁻¹ (fitted; defenders ×1.04, the defending goalkeeper ×3) until attack + defence
+control ≥ 0.99, then is normalised to sum to 1.
+
+**Lofted balls** (off by default). A lofted pass takes `1.32 s + distance / 20.8 m/s`
+(fitted) to land. With `PhysicsParams.air_speed > 0`, control is computed a second time with
+that arrival time and each cell keeps whichever ball, ground or lofted, is likelier to arrive
+and be received (section 4): `FrameSpace.receive` is the control under that ball and
+`FrameSpace.air` marks the lofted cells. The lofted ball is part of the fitted pass-completion
+model, but xSpace leaves it off: taking the better ball rated long balls into space far above
+how often they're played or completed, and the ground-only surface predicts where passes go and
+danger as well or better ([validation.md](validation.md#the-lofted-ball-in-xspace)). With it
+off, `receive` is `control.attack`.
 
 Per-player control shares are kept, for attributing space to runners later.
 
@@ -114,14 +130,26 @@ direct float64 implementation as an oracle.
 
 ## 4. Pass reachability
 
-For each cell, sample 12 points along the straight passing lane. At each point, each defender
-intercepts with logistic probability in `(ball arrival time − defender T)`. Combined over all
-defenders and points like Pressing Intensity combines pressers:
+For each cell, sample 12 points along the straight passing lane. At each point, a defender
+gets there in time with logistic probability in `(ball arrival time − defender T)`, and having
+got there, cuts the ball out with probability 0.152 (`intercept_factor`, fitted). Each defender
+gets one chance, at their best point on the lane; defenders are combined like Pressing
+Intensity combines pressers:
 
 ```
-P(blocked) = 1 − ∏ (1 − p_intercept)
-reach      = 1 − P(blocked)
+p_d        = 0.152 · max over lane points of P(defender d there in time)
+reach      = ∏_d (1 − p_d)
 ```
+
+Phases 0–3 treated every (defender, lane point) pair as an independent chance, so a defender
+beside the lane counted up to 12 times; long passes were rated nearly unreachable (see
+[validation.md](validation.md), V2). The low intercept factor also absorbs tracking noise and
+the fact that players rarely try lanes that are really shut, so reach penalises lanes only
+lightly.
+
+A **lofted** ball (when switched on, section 3) can't be cut out in flight (reach 1) but
+arrives later, so its control is lower; the cell then uses the ball with the larger
+`control × reach`.
 
 ## 5. Value
 
@@ -193,13 +221,19 @@ arrays, and a parallel run equals the serial run exactly (tested).
 
 ### First results (all 71 matches)
 
-From `notebooks/timeline_sanity.ipynb`: 83–86% of sampled frames are computed (the rest are
-set-piece windows, and on PFF ~6% quality flags, mostly a missing ball). IDSSE and PFF give
-xSpace on the same scale (team-match median ≈ 1.15 xT·m²; 1.2 before the offside rule, which
-cut final-third space behind by 10–13%). After a turnover, space **behind** the defence rises
-for ~8 s and stays above restart possessions until ~15 s, and within each third transitions
-have more space behind and a higher, less compact line. *Total* xSpace isn't higher
-in transitions, because the team that just won the ball controls less of the pitch.
+From `notebooks/timeline_sanity.ipynb`, with the calibrated physics: 82–86% of sampled frames
+are computed (the rest are set-piece windows, and on PFF ~6% quality flags, mostly a missing
+ball). IDSSE and PFF give xSpace on the same scale (team-match median 5.2 and 5.4 xT·m²).
+Calibrated control and reach are both higher than in Phases 0–3 (median ≈ 1.15), so xSpace
+values aren't comparable across physics versions. The best cell is on the far touchline in 30%
+of frames: with lanes cheap to pass through, open flank space often wins.
+
+Transitions keep a higher, less compact block than settled play in every third (back line
+3–6 m further from goal, back-to-mid distance 1–2 m larger). But with the calibrated physics
+they have *less* xSpace in every zone, including behind (PFF middle third 2.70 against 4.52),
+because the team that just won the ball controls less of the pitch (mean control 0.51 against
+0.61) and the faster calibrated control rate makes that count for more. With the Phases 0–3
+physics, space behind rose for ~8 s after a turnover; that finding doesn't survive calibration.
 
 ## 9. Exploitation: was the space used?
 
@@ -216,8 +250,8 @@ compares it with the point the ball was sent to:
 | `chosen_rank` | share of the frame's positive-xSpace cells worth less than the chosen one |
 | `decision_gap` | `best − chosen` (≥ 0) |
 | `xt_gained` | xT(end) − xT(origin) if completed, −xT(origin) if lost |
-| `exploited` | completed, `chosen_rank` ≥ 0.9 and `chosen` ≥ 0.005 |
-| `missed` | `best` ≥ 0.02 (≈ top 5% of timeline frames) and `chosen_rank` < 0.5 |
+| `exploited` | completed, `chosen_rank` ≥ 0.9 and `chosen` ≥ 0.01 (≈ the median frame's best cell) |
+| `missed` | `best` ≥ 0.045 (≈ top 5% of timeline frames) and `chosen_rank` < 0.5 |
 | `owner_id`, `best_owner_id` | attacker with the largest pitch-control share at the chosen / best cell |
 
 The **chosen point** (`chosen_source`) is the end location for completed actions; for failed
@@ -231,16 +265,16 @@ metric asks whether *valuable* space was used. Thresholds live in `ExploitationC
 ### First results (all 71 matches)
 
 From `notebooks/moments.ipynb`: 68,464 open-play actions, 96–99% computed. For completed passes
-the attacker owning the chosen cell is the actual receiver 85% of the time (PFF; 77% IDSSE).
-Exploited: 1.1% (PFF) / 1.9% (IDSSE) of actions. Missed: 1.5% / 1.8%, down from 1.8% / 2.0%
-before the offside rule (section 6), which takes value out of best cells behind the line.
-39% of actions go into zero xSpace (backward or square; 92% completed). Completed actions into
-*low*-ranked positive space gain the most xT: they are long (median 32 m vs 12 m) ground
-passes, completed 55% of the time although the reach model rates them nearly unreachable. So
-reachability is too pessimistic for long passes (fixed 15 m/s ball, ground lanes only) and
-`chosen_rank` currently favours short, safe progressions; calibrating reach against observed
-completion is the first Phase 4 task. Exploited moments look right; missed moments are
-dominated by best cells near the six-yard box, where borrowed xT is very high.
+the attacker owning the chosen cell is the actual receiver 85% of the time (PFF; 76% IDSSE).
+The thresholds were rescaled with the calibrated physics to keep their meaning (median and
+95th percentile of the frame's best cell): exploited 0.8% (PFF) / 1.2% (IDSSE) of actions,
+missed 1.9% / 3.4%. 39% of actions go into zero xSpace (backward or square; 92% completed).
+Completion falls as the chosen cell's rank rises (91% in the middle ranks, 45% in the top
+10%), and xT gained by completed actions is highest in the top 10% (0.017). With the Phases
+0–3 physics it was highest in the *lowest* ranks: long ground passes, completed 55% of the time
+although reach rated them nearly unreachable. Calibrating reach (Phase 4) removed that
+inversion. Exploited moments look right; missed moments are dominated by best cells near the
+six-yard box, where borrowed xT is very high.
 
 ## 10. Possessions
 
@@ -258,20 +292,19 @@ are missing: 25% of IDSSE shots, about 5% of PFF's. Seen from the defending team
 
 17,937 possessions (median 116 per team-match IDSSE, 125 PFF); 14,006 have at least 2 s of
 computed open play. Peak xSpace sorts possessions by outcome: the top fifth ends in a shot
-20–22% of the time, the bottom fifth 0.5–1%, and the gap holds for possessions of the same
-length (5–15 s). Peak xSpace is partly a consequence of where the ball got to, so a cleaner
-test uses only the **first 2 s**: possessions lasting over 4 s with the top fifth of early
-xSpace shoot 10–15% of the time against 5% for the bottom fifth, and the effect survives
-holding the starting third fixed (final third: 15% → 26% from the lowest to the highest tercile;
-middle: 7% → 11%). A first sign that xSpace carries information about what happens next; the
-proper version (xSpace at *t* vs shots / xG in the next 10 s, against pitch-control baselines)
-is Phase 4.
+18–20% of the time, the bottom fifth 1–3%, and the gap holds for possessions of the same
+length (5–15 s: 11–21% against 1–3%). Peak xSpace is partly a consequence of where the ball got
+to, so a cleaner test uses only the **first 2 s** of possessions lasting over 4 s. On PFF, the
+top fifth of early xSpace shoots 12% of the time against 6.5% for the bottom fifth; IDSSE shows
+no clear trend. Holding the starting third fixed, the effect is small: final third 18% → 22%
+from the lowest to the highest tercile, middle 9% → 11%. With the Phases 0–3 physics it was
+larger (final third 15% → 26%), in line with V3 ([validation.md](validation.md)).
 
-After an open-play regain, peak xSpace comes a median 4–5 s in; 4–6% of regains contain an
-exploited action, and those end in a shot 30–33% of the time against 6% for the rest. Teams
-differ in how much they concede: from 0.96 xT·m² per possession (Spain) to 1.44 (Iran,
-Netherlands) among World Cup teams with at least 3 matches, and conceded xSpace correlates with
-shots conceded per possession (r = 0.45).
+After an open-play regain, peak xSpace comes a median 3–4 s in; 2–4% of regains contain an
+exploited action, and those end in a shot 39–45% of the time against 5–6% for the rest. Teams
+differ in how much they concede: from 3.5 xT·m² per possession (Spain) to 5.8 (Costa Rica)
+among World Cup teams with at least 3 matches. Conceded xSpace correlates with shots conceded
+per possession (r = 0.55, 32 teams).
 
 ## 11. Players: space held
 
@@ -282,7 +315,7 @@ mean decision gap) and two kinds of off-ball credit:
 
 - **space received**: completed team-mate actions into a cell this player owned (largest
   pitch-control share), whether or not they were the receiver, and the xSpace there;
-- **space held**: team-mate actions whose *best* cell (≥ 0.005, the `exploit_min`) this player
+- **space held**: team-mate actions whose *best* cell (≥ 0.01, the `exploit_min`) this player
   owned, how often the ball went into it (`found`), and how often the action was `missed`.
 
 This counts moments; it doesn't say whether the player's run *created* the space (the
@@ -290,37 +323,48 @@ This counts moments; it doesn't say whether the player's run *created* the space
 
 ### First results (all 71 matches)
 
-Space held per 90 orders the positions sensibly: strikers 44–48 (IDSSE / PFF), wingers 28–48,
-attacking midfielders 22–29, full-backs 9–15, central midfielders ~10, centre-backs ~3,
-goalkeepers 0. The ball goes into the held space 15–24% of the time. Among PFF players with at
-least 270 live minutes the leaders are Julián Álvarez (68 per 90), Olivier Giroud, Andrej
-Kramarić, Kylian Mbappé, Ivan Perišić and Cody Gakpo, with Denzel Dumfries and Nahuel Molina
-the top defenders. The rate is stable within a player (split-half r = 0.85 over 31 players with
-two halves of at least 135 minutes), though much of that is position; a within-position check
-needs more minutes per player than one tournament gives.
+Space held per 90 orders the positions sensibly: wingers 85–121 (IDSSE / PFF), strikers 79–92,
+attacking midfielders 29–33, full-backs 15–20, central midfielders ~7, defensive midfielders
+~4, centre-backs ~3, goalkeepers 0. The ball goes into the held space 8–9% of the time (15–24%
+with the Phases 0–3 physics: best cells are now often on the far touchline, section 8). Among PFF
+players with at least 270 live minutes the leaders are Olivier Giroud (147 per 90), Julián
+Álvarez, Ousmane Dembélé, Kylian Mbappé, Andrej Kramarić and Ivan Perišić, with Denzel Dumfries,
+Nahuel Molina and Josip Juranović the top defenders. With the Phases 0–3 physics the rate was
+stable within a player (split-half r = 0.85 over 31 players); that hasn't been re-measured.
+Much of it is position; a within-position check needs more minutes per player than one
+tournament gives.
 
 ## Known limitations
 
 - **Independence**: defenders are treated as acting independently (same caveat as Pressing
   Intensity). Real defences cover for each other.
-- **Ground passes only**: lofted balls over the line aren't modelled, which undercounts "behind"
-  space. Planned: a second, slower, higher trajectory that can't be intercepted mid-flight.
+- **Ground passes only**: xSpace has no lofted ball, which undercounts "behind" space that only
+  a ball over the top reaches. A fitted lofted ball exists (section 3) and predicts pass
+  completion, but taking the better of the two balls per cell made xSpace worse at predicting
+  where passes go and danger; a version that weights the lofted ball by how often it's chosen
+  is an open option.
 - **Offside** is a hard cut at 0.5 m beyond the line; a soft weighting by P(offside) given
   tracking noise is a Phase 4 option.
-- **Long passes**: reachability is too pessimistic beyond ~25 m (see section 9 results).
-- **Fixed physical parameters** for every player; could be fit per player from tracking data.
+- **Reach is weak**: the fitted intercept factor (0.152) means lanes cost little. Fitted on
+  attempted passes only, it can't see lanes nobody tried; a joint fit that also scored where
+  passes went didn't change the picture enough to adopt ([validation.md](validation.md)).
+- **One set of physical parameters** for every player, fitted to World Cup passes; could be
+  fit per player from tracking data.
 - **Set pieces**: corners and free kicks pack the box, so defensive lines are meaningless there.
   These phases need to be filtered out (or modelled separately) using event data.
 - **Broadcast tracking** (PFF): off-camera players are estimated, so far-side space is less
   reliable. Compare against IDSSE's optical tracking to quantify this.
-- **No validation yet** — see roadmap.
+- **Validation** ([validation.md](validation.md)) covers where passes go, pass completion,
+  danger in the next 10 s and team stability; not yet ratings against results (Phase 5).
 
 ## Roadmap
 
 1. ~~**Match timeline**~~ — done (section 8).
 2. ~~**Exploited vs. available**~~ — done (sections 9–11). Next: threshold tuning by inspection.
-3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
-   and xG in the next 10 s? Compare against plain pitch control and OBSO as baselines.
+3. ~~**Validation**~~ — done ([validation.md](validation.md)): V1–V4 against ablations, and the
+   physics fitted to pass outcomes. V5 (ratings vs results) follows the ratings. The old,
+   heavier lane blocking predicted danger (V3) better; kept as a known trade-off, to revisit
+   with the own value model.
 4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).
 5. **PFF 2022 World Cup** — scale to 64 matches / 32 teams.
 6. **Own value model** — replace borrowed xT with a possession-value model fit on this data.

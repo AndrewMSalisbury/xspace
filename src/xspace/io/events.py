@@ -35,7 +35,8 @@ EVENT_COLUMNS: dict[str, str] = {
     "receiver_player_id": "string",  # actual receiver; for subs, the player coming on
     "success": "boolean",  # pass/cross completed, shot scored, carry retained; NA otherwise
     "outcome": "string",  # raw provider outcome code; for cards one of CARD_OUTCOMES
-    "height": "string",  # raw provider ball-height code
+    "height": "string",  # raw provider ball-height code (PFF: height at contact)
+    "high_point": "string",  # raw provider code of the ball's peak height in flight (PFF only)
     "lines_broken": "string",  # raw provider code (PFF only)
 }
 
@@ -209,6 +210,7 @@ def parse_pff_events(raw: list[dict], meta: dict) -> pd.DataFrame:
             "success": success,
             "outcome": outcome,
             "height": height,
+            "high_point": pe.get("highPointType") if ptype in ("PA", "CR") else None,
             "lines_broken": pe.get("linesBrokenType"),
             "_video_t": ev["eventTime"],
         })
@@ -221,7 +223,8 @@ def parse_pff_events(raw: list[dict], meta: dict) -> pd.DataFrame:
                          "player_id": str(culprit), "team_side": -1, "end_x": np.nan,
                          "end_y": np.nan, "target_player_id": None,
                          "receiver_player_id": None, "success": None, "outcome": card,
-                         "height": None, "lines_broken": None})
+                         "height": None, "high_point": None,
+                         "lines_broken": None})
 
     _pff_end_locations(rows, ball_at)
     for r in rows:
@@ -338,6 +341,7 @@ def from_kloppy_events(dataset) -> pd.DataFrame:
             "success": success,
             "outcome": result,
             "height": "high" if PassType.HIGH_PASS in pass_types else None,
+            "high_point": None,
             "lines_broken": None,
         })
     return _to_frame(rows)

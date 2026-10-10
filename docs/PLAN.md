@@ -11,7 +11,7 @@ into match ratings, team profiles and player ratings, presented through a public
 | Plan written | 2026-09-30 |
 | Target timeline | ~16 weeks: 2026-10-01 → 2027-01-20 (incl. holiday buffer) |
 | Goals | (1) portfolio piece that stands up to expert scrutiny, (2) public interactive tool |
-| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 core done 2026-10-06 (event metrics + moments notebook), possession metrics and runner credit 2026-10-08; video check remains |
+| Status | Phases 0–2 complete (M1, M2 reached 2026-10-01); Phase 3 core done 2026-10-06 (event metrics + moments notebook), possession metrics and runner credit 2026-10-08; video check remains (assumed passed). Phase 4 V1–V4 done 2026-10-09: physics fitted to pass outcomes, xSpace ground-only; V3 (danger favours the old physics) accepted as a trade-off, revisited in Phase 6. PR #4 merged 2026-10-09 |
 
 ---
 
@@ -404,6 +404,24 @@ eye test (watch a sample against video via PFF's `videoUrl` where accessible).
 
 **Goal:** show xSpace means something, and tune the physics honestly.
 
+**Status (2026-10-09).** V1–V4 done; results in [`validation.md`](validation.md).
+
+- **Physics:** fitted to 45k PFF pass outcomes (V2: held-out log loss 0.633 → 0.351). Two
+  model changes: one interception chance per defender, and an intercept factor. A lofted ball
+  is part of the completion model, but xSpace stays ground-only because the lofted version
+  predicted worse.
+- **V1:** needs a distance prior, which the plan didn't foresee. Distance alone beats every
+  surface. With the prior in every model, xSpace beats each ablation on forward passes.
+- **V3:** xSpace beats its ablations within the calibrated physics, but the Phases 0–3 physics
+  (heavier lane blocking) predicts danger better everywhere. Decided 2026-10-09: keep the
+  calibrated physics, accept the gap, and present ratings as space / progression rather than
+  danger. Revisit in Phase 6 (joint physics on V3, or reach fitted to V3).
+- **Joint fit:** fitting the physics to destinations and outcomes together was tried and not
+  adopted.
+- **V4:** team xSpace is stable, with split-half reliability of about 0.93.
+- **Not done:** the broadcast-vs-optical comparison beyond the IDSSE columns, and top-k
+  accuracy.
+
 ### Validation tasks
 
 | # | Question | Target | Metric |
@@ -506,6 +524,8 @@ Every team-match has a rating; leaderboards pass expert eye-test; uncertainty sh
    the next N actions" from location + basic context (phase, pressure from Pressing Intensity,
    number of defenders goal-side). Evaluate against xT v1.
 3. Plug in through the existing `value(points)` interface; re-run Phases 2–5; compare validation.
+4. **Revisit V3** while validation is re-run: score the joint fit's physics on V3 and try a
+   reach fitted to V3, against the Phases 0–3 physics (see `validation.md`, V3 decision).
 
 ### Deliverables
 
@@ -609,7 +629,7 @@ Article published; repo tagged `v1.0.0`; site linked from README and article.
 | 1–2 | Oct 1 – Oct 14 | 1. Data layer | ✅ **M1:** events synced, phases labelled, audit done (Oct 1) |
 | 3–4 | Oct 15 – Oct 28 | 2. Timeline engine | ✅ **M2:** all 71 match timelines built (Oct 1) |
 | 5–6 | Oct 29 – Nov 11 | 3. Exploitation | **M3:** event metrics + "moments" notebook |
-| 7–8 | Nov 12 – Nov 25 | 4. Validation | **M4:** validation report; tuned parameters |
+| 7–8 | Nov 12 – Nov 25 | 4. Validation | **M4:** validation report; tuned parameters (V1–V4 done Oct 9; V3 trade-off accepted) |
 | 9–10 | Nov 26 – Dec 9 | 5. Ratings (+6 in parallel) | **M5:** match/team/player ratings |
 | 11 | Dec 10 – Dec 16 | 6. Value model wrap-up | **M6:** own xT in pipeline |
 | 11–14 | Dec 10 – Jan 6 | 7. Web app | **M7:** site live (holidays = buffer) |

@@ -12,6 +12,11 @@ For every grid cell g in a frame, with the attacking team oriented towards +x:
 - value:       xT gained by moving the ball there, max(xT(g) - xT(ball), 0). Raw xT would let
                the huge, safe, low-value area in a team's own half dominate every total.
 
+With lofted passes on (`PhysicsParams.air_speed > 0`), each cell can also be reached by a
+lofted ball: it can't be cut out (reach 1) but takes longer, so control is computed again with
+its flight time. The cell keeps whichever ball is likelier to arrive and be received
+(`FrameSpace.air`), and control_att becomes control under that ball (`FrameSpace.receive`).
+
 Totals are area-weighted (sum * cell area, units xT·m²) so they don't depend on grid size.
 
 Cells are labelled by zone relative to the defensive shape: behind the last line, between the
@@ -50,13 +55,17 @@ class DefensiveShape:
 class FrameSpace:
     frame: int
     attacking_side: int  # 0 home, 1 away
-    control: ControlSurface
-    reach: np.ndarray  # (G,)
+    control: ControlSurface  # pitch control for a ground pass (classic pitch control)
+    reach: np.ndarray  # (G,) P(not cut out) for the chosen ball (1 where lofted)
     value: np.ndarray  # (G,)
     xspace: np.ndarray  # (G,)
     zone: np.ndarray  # (G,) int index into ZONES
     shape: DefensiveShape
     offside: np.ndarray  # (P_att,) bool: roster slots left out as offside
+    receive: np.ndarray | None = None  # (G,) attacking control under the chosen ball
+    receive_players: np.ndarray | None = None  # (N_att, G) per-player shares of `receive`
+    air: np.ndarray | None = None  # (G,) bool: a lofted ball is the better option
+    ground_reach: np.ndarray | None = None  # (G,) reach of a ground pass, whichever is chosen
     totals: dict[str, float] = field(default_factory=dict)
 
 
@@ -174,13 +183,24 @@ def space_from_arrays(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndar
     ap = np.where(offside[:, None], np.nan, ap)
 
     control = pitch_control(ap, av, dp, dv, b, grid, def_gk=def_gk, params=params)
-    reach = pass_reachability(b, dp, dv, grid, params)
+    reach = ground_reach = pass_reachability(b, dp, dv, grid, params)
+    receive, receive_players = control.attack, control.attack_players
+    air = np.zeros(len(grid), dtype=bool)
+    if params.air_speed > 0:
+        flight = params.air_time + np.sqrt(((grid - b) ** 2).sum(axis=1)) / params.air_speed
+        lofted = pitch_control(ap, av, dp, dv, b, grid, def_gk=def_gk, params=params,
+                               flight=flight, lambda_scale=params.air_lambda_factor)
+        air = lofted.attack > receive * reach
+        receive = np.where(air, lofted.attack, receive)
+        receive_players = np.where(air[None], lofted.attack_players, receive_players)
+        reach = np.where(air, 1.0, reach)
     value = np.maximum(xt_value(grid) - xt_value(b[None])[0], 0.0)
-    xspace = control.attack * reach * value
+    xspace = receive * reach * value
     zone = zone_cells(grid, shape)
 
     cell_area = PITCH_LENGTH * PITCH_WIDTH / len(grid)
     totals = {"total": float(xspace.sum() * cell_area), "best": float(xspace.max())}
     for i, name in enumerate(ZONES):
         totals[name] = float(xspace[zone == i].sum() * cell_area)
-    return FrameSpace(frame, side, control, reach, value, xspace, zone, shape, offside, totals)
+    return FrameSpace(frame, side, control, reach, value, xspace, zone, shape, offside,
+                      receive, receive_players, air, ground_reach, totals)
