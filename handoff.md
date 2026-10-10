@@ -8,8 +8,8 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 | | |
 |---|---|
-| Branches | PRs #1–#3 merged. PR #4 (possessions / players, plus the eye-test checklist generator) open from `phase3-possessions`. **Phase 4 work on `phase4-validation`**, pushed 2026-10-09, branched from `phase3-possessions`: open its PR once #4 is merged (or target `phase3-possessions` now). |
-| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · **4: V1–V4 done, V3 open** |
+| Branches | PRs #1–#4 merged (#4 on 2026-10-09). **Phase 4 on `phase4-validation`**, PR #5 into `main`. |
+| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ (V3 trade-off accepted) · **5 next** |
 | Tests | 63 passing (`pytest`, ~5 s), ruff clean |
 | Data | 71 matches; timelines, actions, possessions, players rebuilt with the calibrated, ground-only physics (hashes: timeline `1dd23ad89967`, actions `7faba5708c37`, possessions `51510fcd8820`); pass sets and ablations in `data/processed/validation/` |
 
@@ -59,7 +59,9 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 ## Open issues
 
 1. **V3: the Phases 0–3 physics predicts danger better** (PFF shot gain 1.24% against 0.75%,
-   box entry 1.16% against 0.33%), through its heavier lane blocking. Next tries:
+   box entry 1.16% against 0.33%), through its heavier lane blocking. **Accepted for now**
+   (2026-10-09, `validation.md` "Decision: keep the calibrated physics"): ratings are framed
+   as space / progression, not danger. Revisit in Phase 6 (PLAN step 4 there):
    - score the joint fit's physics (`intercept_factor` 0.49, in `joint.json`) on V3;
    - fit reach to V3 directly.
 2. **Calibrated physics is worse than the old on IDSSE V1** (0.71 against 0.80 nats, forward
@@ -81,8 +83,6 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Review and merge PR #4 (merge commit, not squash). Then open a PR for `phase4-validation`
-   into `main`; it contains everything since PR #4.
-2. Decide on V3: try the joint physics and a V3-informed reach fit, or accept the trade-off and
-   document it.
-3. Phase 5 (ratings), leaning on team xSpace (stable) rather than the exploitation rate.
+1. Review and merge PR #5 (`phase4-validation`; merge commit, not squash).
+2. Phase 5 (ratings), leaning on team xSpace (stable) rather than the exploitation rate, and
+   framed as space / progression rather than danger (V3 decision).

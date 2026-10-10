@@ -22,7 +22,7 @@ broadcast tracking, another event provider).
 |---|---|---|
 | V1 | Does xSpace predict *where* the next pass goes? | [Done](#v1-where-does-the-pass-go) |
 | V2 | Does reachability predict pass *success*? (and calibration) | [Done](#v2-pass-success-and-calibration) |
-| V3 | Does xSpace now predict danger in the next 10 s? | [Partly](#v3-danger-in-the-next-10-s): old physics predicts it better |
+| V3 | Does xSpace now predict danger in the next 10 s? | [Done, with a known trade-off](#decision-keep-the-calibrated-physics): old physics predicts it better |
 | V4 | Is the team signal stable? | [Done](#v4-is-the-team-signal-stable) |
 | V5 | Do ratings relate to results? | After Phase 5 (ratings) |
 
@@ -257,6 +257,25 @@ tried. A reach fitted to something beyond attempted passes (V3 itself, or the jo
 is: the calibrated physics is better at saying whether a pass will arrive and (on PFF) where it
 goes; the old physics is better at saying whether a frame is dangerous.
 
+### Decision: keep the calibrated physics
+
+Decided 2026-10-09: xSpace keeps the calibrated, ground-only physics everywhere (timelines,
+actions, possessions, players and the ratings built on them). The V3 gap is accepted for now
+and not chased further before Phase 5.
+
+- **One physics, fitted to something observable.** The calibrated parameters are fitted to
+  held-out pass outcomes and are close to Spearman's published kinematics. The old values were
+  never fitted, and their reach misjudges which passes arrive (V2 log loss 0.633 against 0.351).
+  Picking physics per task would mean xSpace measures different things in different places.
+- **The calibrated physics still earns its place.** It wins V1 on PFF forward passes and V2
+  everywhere, and within it xSpace is the best surface for danger on PFF.
+- **What's given up.** xSpace adds less to ball position for predicting danger (PFF shots
+  +0.75% against +1.24% with the old physics). So Phase 5 ratings describe space and
+  progression; they are not presented as a danger or chance-quality measure.
+- **When to revisit.** Phase 6 (own value model) re-runs V1–V3 anyway, which is the natural
+  point to try the two untested options: score the joint fit's physics (`intercept_factor`
+  0.49, `data/processed/validation/joint.json`) on V3, and fit reach to V3 directly.
+
 ## V4: is the team signal stable?
 
 Each team's possessions in a match are split into odd and even in time order, the metric is
@@ -292,7 +311,8 @@ V1–V3, and anything that doesn't is reported with a hypothesis.
   backward and square passes by design.
 - **V2:** done. The fitted physics cuts held-out log loss from 0.633 to 0.351 (AUC 0.76 → 0.86),
   and also improves on IDSSE, which wasn't used for fitting.
-- **V3:** partly done. Within the calibrated physics, xSpace beats its ablations on PFF and is
-  level on IDSSE shots; nothing beats ball position for IDSSE box entries. The Phases 0–3 physics
-  predicts danger better everywhere: the main open issue (hypothesis above).
+- **V3:** done, with a known trade-off. Within the calibrated physics, xSpace beats its
+  ablations on PFF and is level on IDSSE shots; nothing beats ball position for IDSSE box
+  entries. The Phases 0–3 physics predicts danger better everywhere. That is accepted for now
+  ([decision](#decision-keep-the-calibrated-physics)) and revisited in Phase 6.
 - **V4:** done. Team xSpace is stable; the exploitation rate is too noisy per team.

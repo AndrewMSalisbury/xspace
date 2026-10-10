@@ -362,7 +362,9 @@ tournament gives.
 1. ~~**Match timeline**~~ — done (section 8).
 2. ~~**Exploited vs. available**~~ — done (sections 9–11). Next: threshold tuning by inspection.
 3. ~~**Validation**~~ — done ([validation.md](validation.md)): V1–V4 against ablations, and the
-   physics fitted to pass outcomes. V5 (ratings vs results) follows the ratings.
+   physics fitted to pass outcomes. V5 (ratings vs results) follows the ratings. The old,
+   heavier lane blocking predicted danger (V3) better; kept as a known trade-off, to revisit
+   with the own value model.
 4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).
 5. **PFF 2022 World Cup** — scale to 64 matches / 32 teams.
 6. **Own value model** — replace borrowed xT with a possession-value model fit on this data.
