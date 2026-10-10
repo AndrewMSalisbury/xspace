@@ -8,7 +8,7 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 | | |
 |---|---|
-| Branches | PRs #1–#3 merged. PR #4 (possessions / players) open from `phase3-possessions`. **Phase 4 work on `phase4-validation`** (branched from it; not pushed). |
+| Branches | PRs #1–#3 merged. PR #4 (possessions / players, plus the eye-test checklist generator) open from `phase3-possessions`. **Phase 4 work on `phase4-validation`**, pushed 2026-10-09, branched from `phase3-possessions`: open its PR once #4 is merged (or target `phase3-possessions` now). |
 | Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · **4: V1–V4 done, V3 open** |
 | Tests | 63 passing (`pytest`, ~5 s), ruff clean |
 | Data | 71 matches; timelines, actions, possessions, players rebuilt with the calibrated, ground-only physics (hashes: timeline `1dd23ad89967`, actions `7faba5708c37`, possessions `51510fcd8820`); pass sets and ablations in `data/processed/validation/` |
@@ -81,7 +81,8 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Review and merge PR #4. Then open a PR for `phase4-validation`.
+1. Review and merge PR #4 (merge commit, not squash). Then open a PR for `phase4-validation`
+   into `main`; it contains everything since PR #4.
 2. Decide on V3: try the joint physics and a V3-informed reach fit, or accept the trade-off and
    document it.
 3. Phase 5 (ratings), leaning on team xSpace (stable) rather than the exploitation rate.
