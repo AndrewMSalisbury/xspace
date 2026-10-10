@@ -242,6 +242,63 @@ reachability is too pessimistic for long passes (fixed 15 m/s ball, ground lanes
 completion is the first Phase 4 task. Exploited moments look right; missed moments are
 dominated by best cells near the six-yard box, where borrowed xT is very high.
 
+## 10. Possessions
+
+`metrics/possessions.py` rolls the timeline and action files up to one row per possession
+(`PhaseLabels.possession_id`: a new possession on a change of team or a restart). No new
+physics. Per possession: how it started (`regain` in open play, a set-piece type, or `restart`)
+and ended (`turnover` in play or `dead_ball`); mean, peak and time-integrated xSpace and peak
+behind-space from the 5 Hz timeline, with the seconds to the peak; actions, exploited, missed
+and xT gained from the action file, with the seconds to the first exploited action; and whether
+the ball reached the final third or the opponent's penalty area, and whether the team shot or
+scored. Shots are matched through their synced frame, so shots that never synced (section 1)
+are missing: 25% of IDSSE shots, about 5% of PFF's. Seen from the defending team, the same rows are xSpace conceded.
+
+### First results (all 71 matches)
+
+17,937 possessions (median 116 per team-match IDSSE, 125 PFF); 14,006 have at least 2 s of
+computed open play. Peak xSpace sorts possessions by outcome: the top fifth ends in a shot
+20–22% of the time, the bottom fifth 0.5–1%, and the gap holds for possessions of the same
+length (5–15 s). Peak xSpace is partly a consequence of where the ball got to, so a cleaner
+test uses only the **first 2 s**: possessions lasting over 4 s with the top fifth of early
+xSpace shoot 10–15% of the time against 5% for the bottom fifth, and the effect survives
+holding the starting third fixed (final third: 15% → 26% from the lowest to the highest tercile;
+middle: 7% → 11%). A first sign that xSpace carries information about what happens next; the
+proper version (xSpace at *t* vs shots / xG in the next 10 s, against pitch-control baselines)
+is Phase 4.
+
+After an open-play regain, peak xSpace comes a median 4–5 s in; 4–6% of regains contain an
+exploited action, and those end in a shot 30–33% of the time against 6% for the rest. Teams
+differ in how much they concede: from 0.96 xT·m² per possession (Spain) to 1.44 (Iran,
+Netherlands) among World Cup teams with at least 3 matches, and conceded xSpace correlates with
+shots conceded per possession (r = 0.45).
+
+## 11. Players: space held
+
+`metrics/players.py` gives one row per player per match, from the action file. Minutes count
+live-ball frames only, so "per 90" below means per 90 *live* minutes (a World Cup match has
+about 55–60). Each player gets their own on-ball numbers (actions, exploited, missed, xT gained,
+mean decision gap) and two kinds of off-ball credit:
+
+- **space received**: completed team-mate actions into a cell this player owned (largest
+  pitch-control share), whether or not they were the receiver, and the xSpace there;
+- **space held**: team-mate actions whose *best* cell (≥ 0.005, the `exploit_min`) this player
+  owned, how often the ball went into it (`found`), and how often the action was `missed`.
+
+This counts moments; it doesn't say whether the player's run *created* the space (the
+"freeze the runner" counterfactual stays a v2 idea).
+
+### First results (all 71 matches)
+
+Space held per 90 orders the positions sensibly: strikers 44–48 (IDSSE / PFF), wingers 28–48,
+attacking midfielders 22–29, full-backs 9–15, central midfielders ~10, centre-backs ~3,
+goalkeepers 0. The ball goes into the held space 15–24% of the time. Among PFF players with at
+least 270 live minutes the leaders are Julián Álvarez (68 per 90), Olivier Giroud, Andrej
+Kramarić, Kylian Mbappé, Ivan Perišić and Cody Gakpo, with Denzel Dumfries and Nahuel Molina
+the top defenders. The rate is stable within a player (split-half r = 0.85 over 31 players with
+two halves of at least 135 minutes), though much of that is position; a within-position check
+needs more minutes per player than one tournament gives.
+
 ## Known limitations
 
 - **Independence**: defenders are treated as acting independently (same caveat as Pressing
@@ -261,8 +318,7 @@ dominated by best cells near the six-yard box, where borrowed xT is very high.
 ## Roadmap
 
 1. ~~**Match timeline**~~ — done (section 8).
-2. ~~**Exploited vs. available**~~ — done (section 9). Next: off-ball runners, possession-level
-   metrics, threshold tuning by inspection.
+2. ~~**Exploited vs. available**~~ — done (sections 9–11). Next: threshold tuning by inspection.
 3. **Validation** — does xSpace at *t* predict the next pass target, pass success, box entries,
    and xG in the next 10 s? Compare against plain pitch control and OBSO as baselines.
 4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).

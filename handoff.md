@@ -1,16 +1,16 @@
 # Handoff — Xspace
 
-Last updated: 2026-10-06. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) and
+Last updated: 2026-10-08. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) and
 [docs/methodology.md](docs/methodology.md) (how everything is computed).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Branches | PR #1 (Phase 1) and PR #2 (Phase 2) merged. **Phase 3 PR** open from `phase3-exploitation` into `main`. |
-| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics + moments notebook); possession-level metrics and video check remain |
-| Tests | 39 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/` |
+| Branches | PRs #1–#3 (Phases 1–2, Phase 3 action metrics) merged. **Possessions / players PR** open from `phase3-possessions` into `main`. |
+| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics, moments notebook, possession metrics, runner credit); video check remains |
+| Tests | 44 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/`; 71 possession and 71 player files in `data/processed/possessions/`, `players/` |
 
 ## What Phase 3 built so far
 
@@ -21,6 +21,9 @@ Last updated: 2026-10-06. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) a
 | `config.py` | `ExploitationConfig` (grid, thresholds), `ACTIONS_DIR`. Its settings join the params hash for action files only Current hashes: timeline `89404c61b49c`, actions `d29ce1be84de`. |
 | `metrics/timeline.py` | `output_metadata` shared by timeline and action files. |
 | `scripts/build_actions.py` | Like `build_timeline.py`; all 71 matches in ~10 min. |
+| `metrics/possessions.py` | `build_possessions`: one row per possession from the timeline + action files + events: start / end type, mean / peak / integrated xSpace, time to peak and to first exploit, final third / box / shot / goal. |
+| `metrics/players.py` | `build_players`: one row per player per match: live minutes, own actions, space received (owned the chosen cell) and space held (owned a team-mate's best cell; found / ignored). |
+| `scripts/build_possessions.py` | Writes possession and player files. Whole matches in parallel (3 workers); all 71 in < 1 min. Skips matches whose timeline / action files are stale. |
 | `notebooks/moments.ipynb` | Coverage, sanity checks, zones, teams / players, top 20 exploited / missed (IDSSE figures, PFF tables). |
 
 ```python
@@ -52,11 +55,14 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 
 ## Open issues
 
-1. **Review and merge the Phase 3 PR** (merge commit, not squash).
+1. **Review and merge the possessions / players PR** (merge commit, not squash).
 2. **Reachability for long passes** (above): Phase 4, before ratings.
 3. **Thresholds** for `exploited` / `missed` are starting values (≈ 1–2% of actions each).
-4. **Eye test against video**: sample top / bottom PFF moments via `videoUrl` (the notebook
-   lists them). Needs a human.
+4. **Eye test against video** (needs a human): `scripts/eye_test.py` writes
+   `data/processed/eye_test/checklist.md` (gitignored: it quotes PFF data) with 8 exploited,
+   8 missed and 4 control moments, each with the PFF film-room link, the video time to seek to
+   (checked against the game clock) and the model's claim in words. Tick right / wrong /
+   unsure; results go into methodology.md and close Phase 3.
 5. **PFF 3845 (Qatar)** shows up again among the top missed moments: far side often empty
    (estimated players). Phase 4's broadcast-vs-optical comparison.
 6. Carried over: web skeleton not started; re-download PFF 10510 / 10511; tune set-piece /
@@ -65,8 +71,6 @@ acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor=
 
 ## Next steps
 
-1. **Possession-level metrics** (PLAN Phase 3): xSpace conceded per possession, time-to-exploit
-   after a turnover, max xSpace reached, box entry / shot at the end. Join timeline rows to
-   possessions via `possession_id`.
-2. **Runner credit**: aggregate `owner_id` over high-xSpace targets → "space occupied" per player.
-3. Then Phase 4 (validation and calibration), starting with long-pass reachability.
+1. **Video eye test**: fill in `data/processed/eye_test/checklist.md` (see open issue 4), then
+   close Phase 3.
+2. Then Phase 4 (validation and calibration), starting with long-pass reachability.
