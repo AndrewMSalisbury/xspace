@@ -8,7 +8,7 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 | | |
 |---|---|
-| Branches | PRs #1–#4 merged (#4 on 2026-10-09). **Phase 4 on `phase4-validation`**, PR #5 into `main`. |
+| Branches | PRs #1–#5 merged (Phase 4 = #5, 2026-10-09). Follow-up checks on `phase4-followups` (PR #6). Phase 5 branches from `main`. |
 | Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ (V3 trade-off accepted) · **5 next** |
 | Tests | 63 passing (`pytest`, ~5 s), ruff clean |
 | Data | 71 matches; timelines, actions, possessions, players rebuilt with the calibrated, ground-only physics (hashes: timeline `1dd23ad89967`, actions `7faba5708c37`, possessions `51510fcd8820`); pass sets and ablations in `data/processed/validation/` |
@@ -66,16 +66,19 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
    - fit reach to V3 directly.
 2. **Calibrated physics is worse than the old on IDSSE V1** (0.71 against 0.80 nats, forward
    passes). The fit used PFF only.
-3. **Far-touchline best cells** (30% of frames): plausible switch-of-play space, but it lowers
-   how often the ball goes into "held" space (8–9%, down from 15–24%). Worth an eye check.
+3. **Touchline best cells** (30% of frames in the edge row, 17% on the far side): eye-checked
+   2026-10-09 (`methodology.md` section 8). Real space, but a ~67 m ground pass almost nobody
+   plays. Harmless for totals and `missed`; biases `decision_gap` and space held. **Phase 5:**
+   weight the best cell by the V1 distance prior before using it in ratings.
 4. **Findings that changed with calibration:**
    - the transition "space behind" effect reversed;
    - early-possession xSpace predicts shots less strongly;
-   - the player split-half (r = 0.85) wasn't re-measured.
-5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). Pool or shrink it in
-   Phase 5.
+   - player split-half re-measured: space held per 90 r = 0.92 (32 players), 0.70 within
+     position (`methodology.md` section 11).
+5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). **For Phase 5:**
+   pool it over matches or shrink it towards the mean (empirical Bayes); don't rank it raw.
 6. Carried over:
-   - the video eye-test checklist (`scripts/eye_test.py`);
+   - the video eye-test checklist (`scripts/eye_test.py`): **Andrew is doing this by hand**;
    - PFF 3845 estimated players;
    - web skeleton;
    - re-download PFF 10510 / 10511;
@@ -83,6 +86,9 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Review and merge PR #5 (`phase4-validation`; merge commit, not squash).
-2. Phase 5 (ratings), leaning on team xSpace (stable) rather than the exploitation rate, and
-   framed as space / progression rather than danger (V3 decision).
+1. Merge PR #6 (follow-up checks; docs only).
+2. Andrew: the video eye test (open issue 6).
+3. Phase 5 (ratings), on a new branch from `main`:
+   - lean on team xSpace (stable), not the exploitation rate, which needs pooling / shrinkage;
+   - frame ratings as space / progression, not danger (V3 decision);
+   - weight the best cell by the distance prior before it feeds `decision_gap` / space held.

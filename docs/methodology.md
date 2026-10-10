@@ -225,8 +225,26 @@ From `notebooks/timeline_sanity.ipynb`, with the calibrated physics: 82–86% of
 are computed (the rest are set-piece windows, and on PFF ~6% quality flags, mostly a missing
 ball). IDSSE and PFF give xSpace on the same scale (team-match median 5.2 and 5.4 xT·m²).
 Calibrated control and reach are both higher than in Phases 0–3 (median ≈ 1.15), so xSpace
-values aren't comparable across physics versions. The best cell is on the far touchline in 30%
-of frames: with lanes cheap to pass through, open flank space often wins.
+values aren't comparable across physics versions. The best cell is in the outermost row of
+cells (|y| = 33 m) in 30% of frames, and on the side away from the ball in 17%: with lanes cheap
+to pass through, open flank space often wins.
+
+**Eye check of those frames** (2026-10-09; IDSSE frames plotted, PFF counted). The far-side cell
+is real space: the far full-back has tucked in, and a channel of open space runs through to the
+wing. But as an *option* it is a ground pass of a median 67 m (other best cells: 32 m), which is
+almost never played: 0.4% of passes end wide on the far side in the opponent's half, and 69% of
+those are lofted (PFF `highPointType`). The cells sit on the boundary because xSpace keeps
+rising towards the touchline, away from the defenders, so the maximum lands on the last row.
+Almost all of them come from build-up (defensive / middle third 30–31% of frames, final third
+2%). What this touches:
+
+- totals (team xSpace) and `missed`: little or not at all. The cells are worth 0.005–0.012,
+  below `missed_best_min`, so none of the 1,324 missed actions has an edge-row best.
+- `decision_gap` (27% of actions have an edge-row best) and **space held** (21% of its
+  moments): these lean on the single best cell, so far-side wide players collect credit for
+  space no one would pass to. The split-half check (section 11) finds they don't add noise, but
+  they do add a positional bias. Phase 5 should weight the best cell by how likely a pass there
+  is: e.g. the V1 distance prior, `exp(−γ · d / 10 m)` ([validation.md](validation.md#v1-where-does-the-pass-go)).
 
 Transitions keep a higher, less compact block than settled play in every third (back line
 3–6 m further from goal, back-to-mid distance 1–2 m larger). But with the calibrated physics
@@ -329,10 +347,16 @@ attacking midfielders 29–33, full-backs 15–20, central midfielders ~7, defen
 with the Phases 0–3 physics: best cells are now often on the far touchline, section 8). Among PFF
 players with at least 270 live minutes the leaders are Olivier Giroud (147 per 90), Julián
 Álvarez, Ousmane Dembélé, Kylian Mbappé, Andrej Kramarić and Ivan Perišić, with Denzel Dumfries,
-Nahuel Molina and Josip Juranović the top defenders. With the Phases 0–3 physics the rate was
-stable within a player (split-half r = 0.85 over 31 players); that hasn't been re-measured.
-Much of it is position; a within-position check needs more minutes per player than one
-tournament gives.
+Nahuel Molina and Josip Juranović the top defenders.
+
+**Stability** (re-measured 2026-10-09 with the calibrated physics). Each PFF player's matches
+are split alternately into two halves, and space held per 90 is correlated across players with
+at least 135 live minutes in each half (32 players): r = 0.92 (Spearman-Brown 0.96), up from
+0.85 with the Phases 0–3 physics. Much of that is position: after subtracting each position's
+mean, r = 0.70 (0.82). At 90 minutes per half (120 players) the figures are 0.90 and 0.67.
+Leaving out the moments whose best cell is on the touchline (section 8) barely changes them
+(0.91 / 0.78 at 135 minutes), so those moments add bias rather than noise. More minutes per
+player (180 per half leaves 13) would be needed for a firmer within-position check.
 
 ## Known limitations
 
