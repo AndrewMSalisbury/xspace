@@ -1,76 +1,87 @@
 # Handoff — Xspace
 
-Last updated: 2026-10-08. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap) and
-[docs/methodology.md](docs/methodology.md) (how everything is computed).
+Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
+[docs/methodology.md](docs/methodology.md) (how everything is computed) and
+[docs/validation.md](docs/validation.md) (Phase 4 results).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Branches | PRs #1–#3 (Phases 1–2, Phase 3 action metrics) merged. **Possessions / players PR** open from `phase3-possessions` into `main`. |
-| Phase | 0 ✅ · 1 ✅ (M1) · 2 ✅ (M2) · **3 core done** (event metrics, moments notebook, possession metrics, runner credit); video check remains |
-| Tests | 44 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches cached; 71 timelines in `data/processed/timeline/`; 71 action files in `data/processed/actions/`; 71 possession and 71 player files in `data/processed/possessions/`, `players/` |
+| Branches | PRs #1–#3 merged. PR #4 (possessions / players) open from `phase3-possessions`. **Phase 4 work on `phase4-validation`** (branched from it; not pushed). |
+| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · **4: V1–V4 done, V3 open** |
+| Tests | 63 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches; timelines, actions, possessions, players rebuilt with the calibrated, ground-only physics (hashes: timeline `1dd23ad89967`, actions `7faba5708c37`, possessions `51510fcd8820`); pass sets and ablations in `data/processed/validation/` |
 
-## What Phase 3 built so far
+## What Phase 4 changed
 
-| Module | Does |
-|---|---|
-| `io/sync.py` | `refine_release_frames`: per-event release frame (the kick) for IDSSE, stored as `release_frame`. `frame` and everything Phases 1–2 built on it is unchanged. `synchronise(..., refine=True)`; `prepare_match` turns it on for IDSSE. |
-| `metrics/exploitation.py` | `build_actions`: one row per open-play pass / cross / carry, at the release frame on a 1 m grid: available / best / chosen xSpace, rank, decision gap, zone, xT gained, exploited / missed, space owner. |
-| `config.py` | `ExploitationConfig` (grid, thresholds), `ACTIONS_DIR`. Its settings join the params hash for action files only Current hashes: timeline `89404c61b49c`, actions `d29ce1be84de`. |
-| `metrics/timeline.py` | `output_metadata` shared by timeline and action files. |
-| `scripts/build_actions.py` | Like `build_timeline.py`; all 71 matches in ~10 min. |
-| `metrics/possessions.py` | `build_possessions`: one row per possession from the timeline + action files + events: start / end type, mean / peak / integrated xSpace, time to peak and to first exploit, final third / box / shot / goal. |
-| `metrics/players.py` | `build_players`: one row per player per match: live minutes, own actions, space received (owned the chosen cell) and space held (owned a team-mate's best cell; found / ignored). |
-| `scripts/build_possessions.py` | Writes possession and player files. Whole matches in parallel (3 workers); all 71 in < 1 min. Skips matches whose timeline / action files are stale. |
-| `notebooks/moments.ipynb` | Coverage, sanity checks, zones, teams / players, top 20 exploited / missed (IDSSE figures, PFF tables). |
-
-```python
-from xspace.pipeline import prepare_match
-from xspace.metrics.exploitation import build_actions
-
-pm = prepare_match("idsse", "J03WMX")     # events have release_frame
-acts = build_actions(pm.match, pm.events, pm.phases, pm.flags)  # pass executor= for parallel
-```
+- **Physics fitted to 45k PFF pass outcomes** (`config.PhysicsParams`; the old values are
+  `UNCALIBRATED_PARAMS`).
+  - Two model changes came first. Each defender now gets one interception chance per lane, not
+    one per lane sample (`lane_combine="max"`), and an `intercept_factor` (fitted 0.152) sets
+    how often a defender who reaches the lane in time actually cuts the ball out.
+  - Held-out completion log loss went from 0.633 to 0.351.
+- **xSpace is ground-only** (`air_speed = 0`). The fitted lofted ball (20.8 m/s, 1.32 s hang
+  time) is used only by the pass-completion model (`validation/pass_model.py`,
+  `calibration.json`). Taking the better of the two balls per cell made xSpace worse at V1 and
+  V3.
+- **V1 now includes a distance prior**, P ∝ exp(β·s − γ·d). Distance alone beats every surface;
+  the old V1 numbers were mostly the slow Phases 0–3 ball acting as that prior.
+- **The joint fit** (`validation/joint.py`, `scripts/fit_joint.py`) fits the physics to
+  destinations and completion together. It wasn't adopted: +0.01 nats on V1, −0.02 on V2.
+- **Thresholds rescaled** to the new xSpace scale (about 5 per team-match, where it used to be
+  about 1.15): `exploit_min` 0.01, `missed_best_min` 0.045.
+- New modules: `validation/{passes,pass_model,calibrate,joint,ablations,report}.py`.
+  New scripts: `build_pass_set`, `calibrate`, `fit_joint`, `build_ablations`, `validate`.
 
 ## Things learned the hard way
 
-- **Release frames**: picking the frame where the actor is closest to the ball is ambiguous
-  (they're close the whole time they dribble). Score the *jump* in the ball's speed away from
-  the actor, counting only outward movement, or a reception / the flight after the kick wins.
-  Validated on PFF, whose tagged frames are exact: 87–91% within 2 frames. IDSSE passes heading
-  toward their end location: 48–57% → 77–87%.
-- "% heading toward end location" looked capped at 63% until I noticed a quarter of IDSSE
-  passes (the incomplete ones) have no end location. Check the denominator.
-- **Long passes are under-rated** by reachability (fixed 15 m/s ball, ground lanes): completed
-  55% of the time where the model says ~unreachable. `chosen_rank` therefore favours short,
-  safe progressions. First Phase 4 task: calibrate reach against observed completion.
-- **Missed moments** lean on six-yard-box cells, where borrowed xT is very high.
-- `Path.write_text` on Windows writes CRLF; the repo normalises to LF, but use `write_bytes`
-  (or `newline=""`) for scripted edits to avoid noisy diffs.
-- Build outputs while tracked files are being edited get stamped `-dirty`; commit first.
-- Earlier notes still apply: 16 workers (30 broke the Windows pool), `--workers 2` for
-  *uncached* PFF loads, `uv` not on PATH (use `.venv/Scripts/python.exe`).
+- **Fitting completion only on attempted passes** can't see lanes nobody tried. Unbounded, the
+  fit runs away to an instant ball, so it needs bounds (`calibrate.BOUNDS`).
+- **Score destinations against a distance baseline.** Without one, any physics that makes far
+  cells worse looks good.
+- **PFF `highPointType`** (peak height) separates ground and lofted passes. `ballHeightType` is
+  the height at contact.
+- **Long jobs get killed here.** Claude Code's background shells are reaped under memory
+  pressure (Discord, League and Chrome use most of the 32 GB) and stopped after 2 h.
+  - One rebuild hung its process pool after 34 matches.
+  - Run long builds in your own terminal: `.\.venv\Scripts\python.exe scripts\...` in
+    PowerShell. The timeline, actions and possession builds skip up-to-date files, so they
+    resume. `fit_joint.py --resume` restarts from its checkpoint.
+- **Notebooks:** run headless with `nbclient` (installed; nbconvert isn't). Set
+  `PYTHONIOENCODING=utf-8` when printing their outputs.
+- Earlier notes still apply:
+  - `write_bytes` for scripted edits (CRLF);
+  - commit before building, or outputs get stamped `-dirty`;
+  - ≤ 16 workers;
+  - `uv` isn't on PATH.
 
 ## Open issues
 
-1. **Review and merge the possessions / players PR** (merge commit, not squash).
-2. **Reachability for long passes** (above): Phase 4, before ratings.
-3. **Thresholds** for `exploited` / `missed` are starting values (≈ 1–2% of actions each).
-4. **Eye test against video** (needs a human): `scripts/eye_test.py` writes
-   `data/processed/eye_test/checklist.md` (gitignored: it quotes PFF data) with 8 exploited,
-   8 missed and 4 control moments, each with the PFF film-room link, the video time to seek to
-   (checked against the game clock) and the model's claim in words. Tick right / wrong /
-   unsure; results go into methodology.md and close Phase 3.
-5. **PFF 3845 (Qatar)** shows up again among the top missed moments: far side often empty
-   (estimated players). Phase 4's broadcast-vs-optical comparison.
-6. Carried over: web skeleton not started; re-download PFF 10510 / 10511; tune set-piece /
-   transition windows; PFF "estimated" visibility flag; off-pitch quality flag; break plot
-   lines at gaps for published figures.
+1. **V3: the Phases 0–3 physics predicts danger better** (PFF shot gain 1.24% against 0.75%,
+   box entry 1.16% against 0.33%), through its heavier lane blocking. Next tries:
+   - score the joint fit's physics (`intercept_factor` 0.49, in `joint.json`) on V3;
+   - fit reach to V3 directly.
+2. **Calibrated physics is worse than the old on IDSSE V1** (0.71 against 0.80 nats, forward
+   passes). The fit used PFF only.
+3. **Far-touchline best cells** (30% of frames): plausible switch-of-play space, but it lowers
+   how often the ball goes into "held" space (8–9%, down from 15–24%). Worth an eye check.
+4. **Findings that changed with calibration:**
+   - the transition "space behind" effect reversed;
+   - early-possession xSpace predicts shots less strongly;
+   - the player split-half (r = 0.85) wasn't re-measured.
+5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). Pool or shrink it in
+   Phase 5.
+6. Carried over:
+   - the video eye-test checklist (`scripts/eye_test.py`);
+   - PFF 3845 estimated players;
+   - web skeleton;
+   - re-download PFF 10510 / 10511;
+   - set-piece / transition windows.
 
 ## Next steps
 
-1. **Video eye test**: fill in `data/processed/eye_test/checklist.md` (see open issue 4), then
-   close Phase 3.
-2. Then Phase 4 (validation and calibration), starting with long-pass reachability.
+1. Review and merge PR #4. Then open a PR for `phase4-validation`.
+2. Decide on V3: try the joint physics and a V3-informed reach fit, or accept the trade-off and
+   document it.
+3. Phase 5 (ratings), leaning on team xSpace (stable) rather than the exploitation rate.
