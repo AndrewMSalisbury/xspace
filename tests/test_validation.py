@@ -189,11 +189,14 @@ def test_ablation_surfaces_and_scores():
         assert np.all(out[f"total_{s}"] >= 0)
         assert np.all((out[f"rank_{s}"][:2] >= 0) & (out[f"rank_{s}"][:2] <= 1))
         assert np.isnan(out[f"rank_{s}"][2])  # no end point: a V3 frame
-        assert np.all(out[f"ll_{s}"][:2] <= 1e-9)
-        # β = 0 is the uniform baseline over the grid
-        np.testing.assert_allclose(out[f"ll_{s}"][:2, 0], -np.log(len(make_grid(2.0)[2])))
-    # Full xSpace is at least the ground-only version, cell by cell, so in total too.
-    assert np.all(out["total_xspace"] >= out["total_xspace_ground"] - 1e-9)
+        assert np.all(out[f"ll_{s}"][:2] <= 1e-6)
+        # β = γ = 0 is the uniform baseline over the grid
+        np.testing.assert_allclose(out[f"ll_{s}"][:2, 0, 0], -np.log(len(make_grid(2.0)[2])),
+                                   rtol=1e-6)
+    # The distance prior alone (β = 0) moves the end cell off uniform.
+    assert not np.isclose(out["ll_value"][0, 0, -1], out["ll_value"][0, 0, 0])
+    # The better of ground and lofted is at least ground-only, cell by cell, so in total too.
+    assert np.all(out["total_xspace_lofted"] >= out["total_xspace"] - 1e-9)
 
 
 def test_danger_labels():

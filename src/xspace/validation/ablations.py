@@ -8,15 +8,23 @@ Each rung of the ablation ladder is a per-cell surface built from one `FrameSpac
 | value | xT gained by moving the ball there (location only, no tracking) |
 | control | ground-pass pitch control (Spearman) |
 | control_value | control x value |
-| xspace_ground | control x ground reach x value (xSpace with ground passes only) |
-| xspace | receive x reach x value: full xSpace (ground or lofted, whichever is better) |
-| pass_prob | receive x reach: P(a pass there arrives and is received), no value |
+| xspace | control x ground reach x value: xSpace (ground passes, the default) |
+| xspace_lofted | receive x reach x value: ground or lofted ball, whichever is better |
+| pass_prob | control x ground reach: P(a pass there arrives and is received), no value |
+
+`compute` should get physics with the lofted ball on (`air_speed > 0`) so that `xspace_lofted`
+differs from `xspace`; the other surfaces don't use it.
 
 V3 frames (`frame_rows`) store each surface's area-weighted total and best cell, plus the ball's
 xT, with labels: did the team shoot / enter the box within `HORIZON_S` in the same possession.
 V1 passes (`pass_rows`) store, for each surface, where the actual end cell ranks in the frame
 (`rank_*`: share of cells with a lower value) and the softmax log-likelihood of the end cell for
-each temperature in `BETAS` (`ll_*`): P(cell) ∝ exp(β · s / max s).
+each temperature in `BETAS` and distance weight in `GAMMAS` (`ll_{s}_{β}_{γ}`):
+
+    P(cell) ∝ exp(β · s / max s − γ · d / 10 m)       d: distance from the ball
+
+Passes are mostly short whatever the space looks like, so distance alone predicts the end cell
+well. γ > 0 gives every surface that prior, and asks what the surface adds on top of it.
 """
 
 from __future__ import annotations
@@ -35,8 +43,9 @@ from xspace.metrics.timeline import _grid
 from xspace.phases.possession import PhaseLabels
 from xspace.value.xt import xt_value
 
-SURFACES = ("value", "control", "control_value", "xspace_ground", "xspace", "pass_prob")
-BETAS = (0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0, 16.0, 24.0, 32.0, 48.0)
+SURFACES = ("value", "control", "control_value", "xspace", "xspace_lofted", "pass_prob")
+BETAS = (0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0)
+GAMMAS = (0.0, 0.25, 0.5, 0.75, 1.0, 1.5)  # per 10 m
 HORIZON_S = 10.0
 
 
@@ -46,9 +55,9 @@ def surfaces(fs: FrameSpace) -> dict[str, np.ndarray]:
         "value": fs.value,
         "control": ground,
         "control_value": ground * fs.value,
-        "xspace_ground": ground * fs.ground_reach * fs.value,
-        "xspace": fs.xspace,
-        "pass_prob": fs.receive * fs.reach,
+        "xspace": ground * fs.ground_reach * fs.value,
+        "xspace_lofted": fs.xspace,
+        "pass_prob": ground * fs.ground_reach,
     }
 
 
@@ -81,15 +90,16 @@ def compute(snap: Snapshots, cell_size: float, params: PhysicsParams) -> dict[st
     Top-level so worker processes can import it."""
     grid = _grid(cell_size)
     area = PITCH_LENGTH * PITCH_WIDTH / len(grid)
-    n, nb = len(snap.side), len(BETAS)
+    n, nb, ng = len(snap.side), len(BETAS), len(GAMMAS)
     out = {}
     for s in SURFACES:
         out[f"total_{s}"] = np.full(n, np.nan)
         out[f"best_{s}"] = np.full(n, np.nan)
         out[f"rank_{s}"] = np.full(n, np.nan)
-        out[f"ll_{s}"] = np.full((n, nb), np.nan)
+        out[f"ll_{s}"] = np.full((n, nb, ng), np.nan, dtype=np.float32)
     out["air_share"] = np.full(n, np.nan)
-    betas = np.asarray(BETAS)
+    betas = np.asarray(BETAS)[:, None, None]
+    gammas = np.asarray(GAMMAS)[None, :, None]
     for i in range(n):
         side = int(snap.side[i])
         teams = ((snap.home_pos, snap.home_vel, snap.home_gk),
@@ -104,16 +114,18 @@ def compute(snap: Snapshots, cell_size: float, params: PhysicsParams) -> dict[st
         if has_end:
             e = orient(snap.end[i], side)
             cell = int(np.argmin(((grid - e) ** 2).sum(axis=1)))
+            b = orient(snap.ball[i], side)
+            dist = gammas * (np.sqrt(((grid - b) ** 2).sum(axis=1)) / 10.0)[None, None]
         for name, surf in surfaces(fs).items():
             out[f"total_{name}"][i] = surf.sum() * area
             top = surf.max()
             out[f"best_{name}"][i] = top
             if has_end:
                 out[f"rank_{name}"][i] = (surf < surf[cell]).mean()
-                z = betas[:, None] * (surf / top if top > 0 else np.zeros_like(surf))[None]
-                zmax = z.max(axis=1)
-                lse = zmax + np.log(np.exp(z - zmax[:, None]).sum(axis=1))
-                out[f"ll_{name}"][i] = z[:, cell] - lse
+                z = betas * (surf / top if top > 0 else np.zeros_like(surf)) - dist
+                zmax = z.max(axis=2, keepdims=True)
+                lse = zmax[..., 0] + np.log(np.exp(z - zmax).sum(axis=2))
+                out[f"ll_{name}"][i] = z[..., cell] - lse
     return out
 
 
@@ -161,5 +173,6 @@ def pass_rows(results: dict[str, np.ndarray]) -> pd.DataFrame:
     for s in SURFACES:
         cols[f"rank_{s}"] = results[f"rank_{s}"]
         for j, b in enumerate(BETAS):
-            cols[f"ll_{s}_{b:g}"] = results[f"ll_{s}"][:, j]
+            for k, g in enumerate(GAMMAS):
+                cols[f"ll_{s}_{b:g}_{g:g}"] = results[f"ll_{s}"][:, j, k]
     return pd.DataFrame(cols)

@@ -50,10 +50,13 @@ class PhysicsParams:
     # also absorbs tracking noise and that players rarely try lanes that are really shut.
     intercept_factor: float = 0.152  # (fit)
     # Lofted passes: flight time air_time + distance / air_speed, can't be cut out in flight,
-    # contested where they land with every player's control rate x air_lambda_factor. xSpace
-    # takes, per cell, whichever of the ground and lofted ball is likelier to arrive.
-    # air_speed = 0 means ground passes only.
-    air_speed: float = 20.8  # m/s, horizontal (fit)
+    # contested where they land with every player's control rate x air_lambda_factor. With
+    # air_speed > 0, xSpace takes, per cell, whichever of the ground and lofted ball is likelier
+    # to arrive. Off by default (air_speed = 0): xSpace is ground passes only. The best-of
+    # over-rates long balls, and the ground-only surface predicts both where passes go (V1)
+    # and danger (V3) as well or better (docs/validation.md). The fitted lofted ball (20.8 m/s,
+    # 1.32 s, factor 1.0: calibration.json) is still used to score pass completion (V2).
+    air_speed: float = 0.0  # m/s, horizontal (fit for completion: 20.8)
     air_time: float = 1.32  # s (fit)
     air_lambda_factor: float = 1.0  # (fit: 1.002)
     # Attackers more than this far beyond the offside line can't receive a pass, so they get
@@ -93,12 +96,13 @@ class ExploitationConfig:
     cell_size: float = 1.0  # m; fine enough to read xSpace at a single target point
     skip_flags: int = 0b1111  # as TimelineConfig: release frames with these flags are skipped
     # exploited = completed, into a cell in the top (1 - exploit_rank) of the frame's positive
-    # xSpace, worth at least exploit_min (≈ the median frame's best cell)
+    # xSpace, worth at least exploit_min (≈ the median frame's best cell: 0.011 with the
+    # calibrated physics; 0.005 before)
     exploit_rank: float = 0.9
-    exploit_min: float = 0.005
-    # missed = the frame's best cell was big (≈ top 5% of frames) but the choice was in the
-    # bottom `missed_rank` of the frame's positive xSpace
-    missed_best_min: float = 0.02
+    exploit_min: float = 0.01
+    # missed = the frame's best cell was big (≈ top 5% of frames: 0.045 calibrated; 0.02
+    # before) but the choice was in the bottom `missed_rank` of the frame's positive xSpace
+    missed_best_min: float = 0.045
     missed_rank: float = 0.5
     chunk_size: int = 64  # actions per parallel task
 

@@ -3,6 +3,10 @@
     uv run python scripts/build_ablations.py            # the physics in config.py (calibrated)
     uv run python scripts/build_ablations.py --default  # UNCALIBRATED_PARAMS (Phases 0-3)
 
+The calibrated run switches on the fitted lofted ball (calibration.json) so that the
+`xspace_lofted` surface can be compared with ground-only `xspace`; the Phases 0-3 physics had no
+lofted ball, so there the two are the same.
+
 Per match, writes data/processed/validation/ablations[_default]/
 {source}_{match}_{frames,passes}.parquet:
 V3 frames sampled at --hz in open play, with danger labels; V1 passes from the pass dataset
@@ -12,9 +16,11 @@ V3 frames sampled at --hz in open play, with danger labels; V1 passes from the p
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -48,7 +54,12 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1))
     args = ap.parse_args()
 
-    params = UNCALIBRATED_PARAMS if args.default else DEFAULT_PARAMS
+    if args.default:
+        params = UNCALIBRATED_PARAMS
+    else:
+        fit = json.loads((VALIDATION_DIR / "calibration.json").read_text())["fitted"]
+        params = replace(DEFAULT_PARAMS, **{k: fit[k] for k in
+                                            ("air_speed", "air_time", "air_lambda_factor")})
     print(params)
     out_dir = VALIDATION_DIR / ("ablations_default" if args.default else "ablations")
     out_dir.mkdir(parents=True, exist_ok=True)

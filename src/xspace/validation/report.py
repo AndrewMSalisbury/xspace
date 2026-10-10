@@ -1,9 +1,11 @@
 """Scores for validation tasks V1 and V3 from the ablation files (`validation.ablations`).
 
 V1 (where does the pass go?): each surface becomes a softmax over cells,
-P(cell) ∝ exp(β · s / max s). β is picked on training matches; the test score is the mean
-log-likelihood of the actual end cell minus that of a uniform guess (nats per pass: higher is
-better, 0 = no better than uniform), plus the end cell's mean rank within its frame.
+P(cell) ∝ exp(β · s / max s − γ · d / 10 m), d the distance from the ball. β (and γ) are
+picked on training matches; the test score is the mean log-likelihood of the actual end cell
+minus that of a uniform guess (nats per pass: higher is better, 0 = no better than uniform),
+plus the end cell's mean rank within its frame. Each surface is scored alone (γ = 0) and on top
+of the distance prior; a `distance` row is the prior alone (β = 0).
 
 V3 (does space now predict danger soon?): for each surface's frame total and best cell, the
 AUC for a shot / box entry within 10 s in the same possession, and — the real test — what it
@@ -17,31 +19,44 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-from xspace.validation.ablations import BETAS, SURFACES
+from xspace.validation.ablations import BETAS, GAMMAS, SURFACES
 from xspace.validation.pass_model import auc, log_loss
 
 BALL_FEATURES = ("ball_xt", "ball_x", "abs_ball_y")
 
 
+def _best(passes: pd.DataFrame, cols: list[str], params: list, tr: np.ndarray,
+          te: np.ndarray, uniform: str) -> tuple:
+    """The column with the best mean on train: (its parameters, test gain over uniform)."""
+    j = int(np.nanargmax(passes.loc[tr, cols].mean().to_numpy()))
+    return params[j], float((passes.loc[te, cols[j]] - passes.loc[te, uniform]).mean())
+
+
 def v1_scores(passes: pd.DataFrame, train: np.ndarray, test: np.ndarray,
               subsets: dict[str, np.ndarray] | None = None) -> pd.DataFrame:
-    """One row per (subset, surface): best β on train, test gain over uniform, mean rank."""
+    """One row per (subset, surface): β picked on train and the test gain over uniform, alone
+    (`beta`, `gain_nats`) and with the distance prior (`beta_d`, `gamma`, `gain_with_distance`),
+    and the end cell's mean rank."""
     subsets = subsets or {"all": np.ones(len(passes), dtype=bool)}
-    uniform = f"ll_{SURFACES[0]}_{BETAS[0]:g}"  # β = 0: the same for every surface
+    ll = lambda s, b, g: f"ll_{s}_{b:g}_{g:g}"  # noqa: E731
+    uniform = ll(SURFACES[0], 0, 0)  # β = γ = 0: the same for every surface
+    ok = passes[uniform].notna().to_numpy()
+    grid = [(b, g) for b in BETAS for g in GAMMAS]
     rows = []
     for name, mask in subsets.items():
-        tr, te = train & mask, test & mask
+        tr, te = train & mask & ok, test & mask & ok
+        g0, gain0 = _best(passes, [ll(SURFACES[0], 0, g) for g in GAMMAS], list(GAMMAS), tr,
+                          te, uniform)
+        rows.append({"subset": name, "surface": "distance", "n_test": int(te.sum()),
+                     "beta": 0.0, "gain_nats": 0.0, "beta_d": 0.0, "gamma": g0,
+                     "gain_with_distance": gain0, "mean_rank": np.nan})
         for s in SURFACES:
-            cols = [f"ll_{s}_{b:g}" for b in BETAS]
-            ok = passes[cols[0]].notna().to_numpy()
-            train_ll = passes.loc[tr & ok, cols].mean().to_numpy()
-            j = int(np.nanargmax(train_ll))
-            te_ok = te & ok
+            b, gain = _best(passes, [ll(s, b, 0) for b in BETAS], list(BETAS), tr, te, uniform)
+            (bd, g), gain_d = _best(passes, [ll(s, *bg) for bg in grid], grid, tr, te, uniform)
             rows.append({
-                "subset": name, "surface": s, "n_test": int(te_ok.sum()), "beta": BETAS[j],
-                "gain_nats": float((passes.loc[te_ok, cols[j]]
-                                    - passes.loc[te_ok, uniform]).mean()),
-                "mean_rank": float(passes.loc[te_ok, f"rank_{s}"].mean()),
+                "subset": name, "surface": s, "n_test": int(te.sum()), "beta": b,
+                "gain_nats": gain, "beta_d": bd, "gamma": g, "gain_with_distance": gain_d,
+                "mean_rank": float(passes.loc[te, f"rank_{s}"].mean()),
             })
     return pd.DataFrame(rows)
 
