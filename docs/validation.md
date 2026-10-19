@@ -365,23 +365,34 @@ log-loss gain of total xSpace over ball position.)
   `lane_combine = "product"` (every point of a lane an independent chance) and a slow ball.
 - The joint fit sits between 0.5 and 0.75 on V3 and is worse on IDSSE V1.
 
+**Decision (2026-10-19, Andrew): adopt `intercept_factor` 0.75.** V2 only sees passes players
+chose to try, so it is biased towards light blocking; V1 and V3 see the lanes nobody tried, and
+both improve. Every output was rebuilt; xSpace roughly halves (median best cell 0.011 → 0.0061,
+team-match median 5.3 → 2.8 xT·m²) and the thresholds were rescaled to keep their meaning
+(`exploit_min` 0.006, `missed_best_min` 0.03, likely cells ≥ 0.0023). The rest of the gap to
+the Phases 0–3 physics on V3 (`lane_combine`, ball speed) is still open.
+
 ## V5: do ratings relate to results? (Phase 5)
 
 From `notebooks/ratings.ipynb`, on the ratings of `scripts/build_ratings.py`
 ([methodology.md](methodology.md) section 12). Nothing here was fitted, so there is no split.
 
 **Teams (32 World Cup teams, pooled over matches; Spearman).** The team-level numbers track
-results per possession:
+results per possession. Re-run after Phase 6 adopted heavier blocking (`intercept_factor`
+0.75); the first column is Phase 5's (0.152):
 
-| Rating | Against | ρ | p |
-|---|---|---|---|
-| xSpace created | shots per possession | 0.47 | 0.006 |
-| exploitation rate (shrunk) | shots per possession | 0.39 | 0.03 |
-| xSpace conceded | shots conceded per possession | 0.38 | 0.03 |
-| xSpace conceded behind | shots conceded per possession | 0.41 | 0.02 |
-| opponents' exploitation rate (shrunk) | shots conceded per possession | **0.66** | < 0.001 |
-| xSpace conceded | goal difference per match | −0.33 | 0.06 |
-| xSpace created | goal difference per match | 0.13 | 0.47 |
+| Rating | Against | ρ (0.152) | ρ (0.75) | p (0.75) |
+|---|---|---|---|---|
+| xSpace created | shots per possession | 0.47 | 0.40 | 0.02 |
+| exploitation rate (shrunk) | shots per possession | 0.39 | **0.65** | < 0.001 |
+| xSpace conceded | shots conceded per possession | 0.38 | 0.44 | 0.01 |
+| xSpace conceded behind | shots conceded per possession | 0.41 | 0.45 | 0.009 |
+| opponents' exploitation rate (shrunk) | shots conceded per possession | 0.66 | 0.61 | < 0.001 |
+| xSpace conceded | goal difference per match | −0.33 | −0.35 | 0.05 |
+| xSpace created | goal difference per match | 0.13 | 0.00 | 0.99 |
+
+Below, the numbers are Phase 5's (0.152) unless marked; the 0.75 re-run changes them little
+except where noted.
 
 **Team-matches (142; Spearman with the grades, higher = better for the team).** Weaker, as
 one match is noisy: space created 0.20 with shots per possession and 0.39 with box entries per
@@ -389,7 +400,9 @@ possession; the shrunk exploitation rate 0.34 with shots; opponents' use −0.34
 conceded. Nothing relates to the match's goal difference beyond ±0.14. Space created and
 conceded both follow possession share (±0.50): dominant teams find more space and leave less.
 
-**Low blocks: the sanity check fails as posed.** PLAN expected teams that defend deep to concede
+**Low blocks: the sanity check fails as posed** (at 0.152; with heavier blocking the
+relation weakens to ρ = −0.17, p = 0.34, so deep blocks no longer concede clearly *more*).
+ PLAN expected teams that defend deep to concede
 little space *behind*. With the opponent's ball in the middle third, a deeper back line goes
 with *more* xSpace behind (ρ = −0.42 between line height and space behind, p = 0.02; Costa Rica
 defend deepest, 31.8 m from goal, and concede most) and much more in front (ρ = −0.87).
@@ -410,7 +423,8 @@ evidence for either, but it means the player ratings have no outside support yet
 better option. The likely gap doesn't separate them (median 0.0018 flagged vs 0.0019, AUC
 0.50; raw decision gap 0.47). `missed` does, weakly: 3.7% of flagged actions against 1.9%. When
 PFF names the better player (239 times), it is the owner of our likely cell 22% of the time
-(16% for the raw best cell). Our "better option" is the most valuable reachable space; theirs
+(16% for the raw best cell). At 0.75: AUC 0.525 for the likely gap, `missed` 3.1% against
+1.6%, the named player is our likely owner 24% of the time. Our "better option" is the most valuable reachable space; theirs
 includes holding, crossing and safer passes, so overlap was always going to be partial, but
 the likely gap is not a measure of decision quality as PFF sees it.
 
@@ -434,5 +448,8 @@ V1–V3, and anything that doesn't is reported with a hypothesis.
   entries. The Phases 0–3 physics predicts danger better everywhere. That is accepted for now
   ([decision](#decision-keep-the-calibrated-physics)) and revisited in Phase 6.
 - **V4:** done. Team xSpace is stable; the exploitation rate is too noisy per team.
-- **V5:** done. Team ratings track shots for and against (ρ 0.38–0.66 over 32 teams);
-  player ratings don't agree with PFF's grades, and the low-block check fails as posed.
+- **V5:** done. Team ratings track shots for and against (ρ 0.40–0.65 over 32 teams at the
+  adopted physics); player ratings don't agree with PFF's grades.
+- **Phase 6:** our own xT grid predicts possession outcomes better but makes xSpace slightly
+  worse, so Singh's grid stays; heavier lane blocking (`intercept_factor` 0.75) adopted for
+  V1 / V3 at a cost in V2.
