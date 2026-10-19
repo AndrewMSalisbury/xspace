@@ -103,13 +103,13 @@ class ExploitationConfig:
     cell_size: float = 1.0  # m; fine enough to read xSpace at a single target point
     skip_flags: int = 0b1111  # as TimelineConfig: release frames with these flags are skipped
     # exploited = completed, into a cell in the top (1 - exploit_rank) of the frame's positive
-    # xSpace, worth at least exploit_min (≈ the median frame's best cell: 0.011 with the
-    # calibrated physics; 0.005 before)
+    # xSpace, worth at least exploit_min (≈ the median frame's best cell: 0.0061 with
+    # intercept_factor 0.75; 0.011 at 0.152; 0.005 with the Phases 0-3 physics)
     exploit_rank: float = 0.9
-    exploit_min: float = 0.01
-    # missed = the frame's best cell was big (≈ top 5% of frames: 0.045 calibrated; 0.02
-    # before) but the choice was in the bottom `missed_rank` of the frame's positive xSpace
-    missed_best_min: float = 0.045
+    exploit_min: float = 0.006
+    # missed = the frame's best cell was big (≈ top 5% of frames: 0.0295 now; 0.045 at 0.152;
+    # 0.02 before) but the choice was in the bottom `missed_rank` of the frame's positive xSpace
+    missed_best_min: float = 0.03
     missed_rank: float = 0.5
     # likely = the best cell once xSpace is weighted by how likely a pass that far is:
     # exp(−likely_gamma · distance from the ball / 10 m), the V1 distance prior (γ fitted for
