@@ -22,6 +22,7 @@ ACTIONS_DIR = CACHE_DIR / "actions"
 POSSESSIONS_DIR = CACHE_DIR / "possessions"
 PLAYERS_DIR = CACHE_DIR / "players"
 VALIDATION_DIR = CACHE_DIR / "validation"
+RATINGS_DIR = CACHE_DIR / "ratings"
 
 
 @dataclass(frozen=True)
