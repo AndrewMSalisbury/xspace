@@ -17,6 +17,9 @@ def actions_for():
         "chosen": [0.03, 0.0, 0.002, 0.5], "best": [0.03, 0.05, 0.003, 0.5],
         "owner_id": pd.array(["h3", "h4", "h1", "h3"], dtype="string"),
         "best_owner_id": pd.array(["h3", "h3", "h3", "h3"], dtype="string"),
+        # The likely cell moves the second action's credit from h3 (far touchline) to h4.
+        "likely": [0.03, 0.02, 0.003, 0.5], "likely_gap": [0.0, 0.02, 0.001, 0.0],
+        "likely_owner_id": pd.array(["h3", "h4", "h3", "h3"], dtype="string"),
     })
 
 
@@ -45,3 +48,6 @@ def test_credit():
     assert (h3["n_best_space"], h3["n_best_found"], h3["n_best_ignored"]) == (2, 1, 1)
     np.testing.assert_allclose(h3["xspace_received"], 0.03)
     assert h2["n_actions"] == 1 and h2["n_best_space"] == 0
+    np.testing.assert_allclose(h1["likely_gap"], 0.01)
+    assert (h3["n_likely_space"], h3["n_likely_found"]) == (1, 1)
+    assert (df.loc["h4", "n_likely_space"], df.loc["h4", "n_likely_found"]) == (1, 1)

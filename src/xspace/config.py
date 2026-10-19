@@ -104,6 +104,11 @@ class ExploitationConfig:
     # before) but the choice was in the bottom `missed_rank` of the frame's positive xSpace
     missed_best_min: float = 0.045
     missed_rank: float = 0.5
+    # likely = the best cell once xSpace is weighted by how likely a pass that far is:
+    # exp(−likely_gamma · distance from the ball / 10 m), the V1 distance prior (γ fitted for
+    # xSpace: docs/validation.md). The raw best is often a ~67 m ground pass to the far
+    # touchline that nobody plays (docs/methodology.md section 8).
+    likely_gamma: float = 1.0
     chunk_size: int = 64  # actions per parallel task
 
 

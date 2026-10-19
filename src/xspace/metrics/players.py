@@ -5,13 +5,16 @@ attacker with the largest pitch-control share at the chosen and at the best cell
 
 - `team_side`, `player_id`, `position`, `minutes`: from tracking; minutes on the pitch while
   the ball was live.
-- `n_actions`, `n_exploited`, `n_missed`, `xt_gained`, `decision_gap`: the player's own passes,
-  crosses and carries.
+- `n_actions`, `n_exploited`, `n_missed`, `xt_gained`, `decision_gap`, `likely_gap`: the
+  player's own passes, crosses and carries.
 - `n_received_space`, `xspace_received`: completed actions into a cell this player owned
   (receiver or not), and the sum of their xSpace.
 - `n_best_space`: team-mates' actions whose best cell (best ≥ `min_best`) this player owned:
   space occupied. `n_best_found`: of those, the ball went into this player's space.
   `n_best_ignored`: of those, the action was `missed`.
+- `n_likely_space`, `n_likely_found`: the same for the *likely* best cell (weighted by the
+  distance prior), which doesn't credit far-touchline space nobody passes to. Phase 5 rates
+  space held on these.
 
 Credit is a count of moments, not a model of the run that made the space; the counterfactual
 version ("freeze the runner, recompute") is a v2 idea in docs/PLAN.md.
@@ -56,7 +59,7 @@ def build_players(match: MatchTracking, actions: pd.DataFrame,
     own = pd.DataFrame({
         "n_actions": g.size(), "n_exploited": g["exploited"].sum(),
         "n_missed": g["missed"].sum(), "xt_gained": g["xt_gained"].sum(),
-        "decision_gap": g["decision_gap"].mean(),
+        "decision_gap": g["decision_gap"].mean(), "likely_gap": g["likely_gap"].mean(),
     })
     g = by(act[completed], "owner_id")
     received = pd.DataFrame({"n_received_space": g.size(), "xspace_received": g["chosen"].sum()})
@@ -65,8 +68,11 @@ def build_players(match: MatchTracking, actions: pd.DataFrame,
     g = by(big.assign(found=big["owner_id"] == big["best_owner_id"]), "best_owner_id")
     space = pd.DataFrame({"n_best_space": g.size(), "n_best_found": g["found"].sum(),
                           "n_best_ignored": g["missed"].sum()})
+    big = act[(act["likely"] >= min_best) & (act["likely_owner_id"] != act["player_id"])]
+    g = by(big.assign(found=big["owner_id"] == big["likely_owner_id"]), "likely_owner_id")
+    likely = pd.DataFrame({"n_likely_space": g.size(), "n_likely_found": g["found"].sum()})
 
-    df = df.join(own).join(received).join(space)
+    df = df.join(own).join(received).join(space).join(likely)
     counts = [c for c in df.columns if c.startswith("n_")]
     df[counts] = df[counts].fillna(0).astype(np.int32)
     df[["xt_gained", "xspace_received"]] = df[["xt_gained", "xspace_received"]].fillna(0.0)
