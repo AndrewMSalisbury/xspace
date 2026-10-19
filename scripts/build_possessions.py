@@ -45,7 +45,7 @@ def build_one(source: str, match_id: str) -> str:
     df = build_possessions(pm.match, pm.events, pm.phases, timeline, actions)
     write_timeline(df, POSSESSIONS_DIR / f"{source}_{match_id}.parquet",
                    possessions_metadata(source, pm.match))
-    players = build_players(pm.match, actions)
+    players = build_players(pm.match, actions, pm.phases)
     write_timeline(players, PLAYERS_DIR / f"{source}_{match_id}.parquet",
                    possessions_metadata(source, pm.match))
     return f"{len(df)} possessions, {int(df['shot'].sum())} with a shot; {len(players)} players"

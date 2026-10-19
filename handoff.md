@@ -1,17 +1,41 @@
 # Handoff — Xspace
 
-Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
+Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 [docs/methodology.md](docs/methodology.md) (how everything is computed) and
-[docs/validation.md](docs/validation.md) (Phase 4 results).
+[docs/validation.md](docs/validation.md) (Phase 4 and V5 results).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Branches | PRs #1–#5 merged (Phase 4 = #5, 2026-10-09). Follow-up checks on `phase4-followups` (PR #6). Phase 5 branches from `main`. |
-| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ (V3 trade-off accepted) · **5 next** |
-| Tests | 63 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches; timelines, actions, possessions, players rebuilt with the calibrated, ground-only physics (hashes: timeline `1dd23ad89967`, actions `7faba5708c37`, possessions `51510fcd8820`); pass sets and ablations in `data/processed/validation/` |
+| Branches | PRs #1–#6 merged (#6 on 2026-10-18). Phase 5 on `phase5-ratings`, PR #7. Phase 6 branches from `main` once it merges. |
+| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ · 5 ✅ pending Andrew's leaderboard eye test · **6 next** |
+| Tests | 74 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches; actions (likely cell, responsible defender), possessions, players rebuilt at `ba096a4`; ratings in `data/processed/ratings/` |
+
+## What Phase 5 did (methodology.md section 12, validation.md V5)
+
+- **Likely best cell** on every action: xSpace × `exp(−d / 10 m)` (the V1 prior). Edge-row
+  best cells fall from 27% to 0.7%. `likely_gap` and space held (`n_likely_space`, ≥ 0.003)
+  use it. `likely_defender_id` is the outfield defender quickest to that cell.
+- **Players** get minutes in / out of possession. Runners are graded per 90 *in possession*,
+  and defenders (experimental) per 90 out of possession.
+- **`metrics/ratings.py`, `scripts/build_ratings.py`** (~10 s):
+  - team-match ratings: attack / defence, 80% possession-bootstrap intervals, 5 grades and a
+    summary line;
+  - team profiles and leak maps;
+  - player ratings: carriers, runners, defenders, with empirical-Bayes shrinkage towards
+    position means.
+- **Player directory** (`io.lineups.player_directory`): the PFF rosters fix 153 `UNK`
+  starters. Cached in `ratings/directory.parquet`.
+- **`validation/pff_grades.py`**: PFF analysts' event grades and "better option" flags.
+- **`notebooks/ratings.ipynb`**: leaderboards, sanity checks, PFF benchmark, V5.
+- **V5 results**:
+  - team ratings track shots for and against (ρ 0.38–0.66 over 32 teams);
+  - player ratings don't agree with PFF grades (|ρ| ≤ 0.16 within position);
+  - the likely gap doesn't separate PFF's better-option flags (AUC 0.50);
+  - deep blocks concede *more* value-weighted space behind (the low-block check fails as
+    posed).
 
 ## What Phase 4 changed
 
@@ -35,6 +59,10 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
   New scripts: `build_pass_set`, `calibrate`, `fit_joint`, `build_ablations`, `validate`.
 
 ## Things learned the hard way
+
+- **Up-to-date checks compare settings, not code.** A code change to a build (e.g. a new
+  action column) needs `--force`. A threshold change in `config.py` / `players.py` triggers
+  rebuilds by itself.
 
 - **Fitting completion only on attempted passes** can't see lanes nobody tried. Unbounded, the
   fit runs away to an instant ball, so it needs bounds (`calibrate.BOUNDS`).
@@ -68,15 +96,15 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
    passes). The fit used PFF only.
 3. **Touchline best cells** (30% of frames in the edge row, 17% on the far side): eye-checked
    2026-10-09 (`methodology.md` section 8). Real space, but a ~67 m ground pass almost nobody
-   plays. Harmless for totals and `missed`; biases `decision_gap` and space held. **Phase 5:**
-   weight the best cell by the V1 distance prior before using it in ratings.
+   plays. Harmless for totals and `missed`; biases `decision_gap` and space held. **Done
+   (Phase 5):** ratings use the likely cell (distance-weighted).
 4. **Findings that changed with calibration:**
    - the transition "space behind" effect reversed;
    - early-possession xSpace predicts shots less strongly;
    - player split-half re-measured: space held per 90 r = 0.92 (32 players), 0.70 within
      position (`methodology.md` section 11).
-5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). **For Phase 5:**
-   pool it over matches or shrink it towards the mean (empirical Bayes); don't rank it raw.
+5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). **Done
+   (Phase 5):** shrunk with an empirical-Bayes beta-binomial before grading.
 6. Carried over:
    - the video eye-test checklist (`scripts/eye_test.py`): **Andrew is doing this by hand**;
    - PFF 3845 estimated players;
@@ -86,9 +114,13 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Merge PR #6 (follow-up checks; docs only).
+1. Merge PR #7 (Phase 5) after Andrew's eye test of `notebooks/ratings.ipynb` (PLAN's
+   definition of done: leaderboards pass an expert eye test).
 2. Andrew: the video eye test (open issue 6).
-3. Phase 5 (ratings), on a new branch from `main`:
-   - lean on team xSpace (stable), not the exploitation rate, which needs pooling / shrinkage;
-   - frame ratings as space / progression, not danger (V3 decision);
-   - weight the best cell by the distance prior before it feeds `decision_gap` / space held.
+3. Phase 5 follow-ups, if wanted:
+   - a relative decision gap: the absolute one penalises carriers in rich areas;
+   - an area-only "behind", to test the low-block hypothesis (validation.md V5);
+   - a heat map of all space conceded: needs per-cell sums in the timeline (rebuild); the
+     leak map stands in.
+4. Phase 6 (own value model). It also revisits V3 (danger) and may help the player ratings,
+   which have no outside support yet.

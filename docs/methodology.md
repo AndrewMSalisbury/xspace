@@ -358,6 +358,97 @@ Leaving out the moments whose best cell is on the touchline (section 8) barely c
 (0.91 / 0.78 at 135 minutes), so those moments add bias rather than noise. More minutes per
 player (180 per half leaves 13) would be needed for a firmer within-position check.
 
+## 12. Ratings
+
+`metrics/ratings.py` (CLI `scripts/build_ratings.py`, about 10 s) turns the per-match files into
+ratings. No new physics. The ratings describe **space and progression, not danger**: the
+calibrated physics predicts where passes go and whether they arrive, but not danger as well as
+the Phases 0–3 physics did (V3, [validation.md](validation.md)). Outputs in
+`data/processed/ratings/` (Parquet and CSV): `team_match`, `team_profile`, `leak_map`, `player`.
+
+**The likely best cell.** Several metrics lean on the frame's single best cell, which is often
+a far-touchline ground pass nobody plays (section 8). Every action now also has a *likely* cell:
+the best cell once xSpace is weighted by the V1 distance prior, `exp(−d / 10 m)` (γ = 1, fitted
+for xSpace). `likely` is the cell's unweighted xSpace, `likely_gap = max(likely − chosen, 0)`,
+and `likely_owner_id` is its owner. Edge-row best cells fall from 27% of actions to 0.7%.
+Likely cells are worth less (median 0.0027 against 0.011), so space held credits likely cells
+≥ 0.003 (a median option, as `exploit_min` is for the best cell). The old columns stay.
+
+**Team-match ratings** (one row per team per match, open play). Attack, from the team's
+possessions: xSpace created per second of possession (the mean 5 Hz frame total) and per
+possession, by zone and zone shares, transition / settled, by the ball's third; exploited
+actions, exploitation rate, xT from exploited actions, mean likely gap. Defence, from the
+opponent's possessions: the same as xSpace conceded, plus compactness and block width. Shots,
+goals and box entries for and against are kept for validation.
+
+- **Intervals**: 80%, from a Poisson bootstrap over possessions (1,000 resamples). Median width
+  for xSpace created: 0.68 xT·m² (about 21 grade points).
+- **Shrinkage**: exploitation rates are ~1% of actions, too few per match to rank raw (V4
+  reliability 0.37–0.54). They are shrunk towards the pooled rate with an empirical-Bayes
+  beta-binomial (method of moments) before grading.
+- **Grades**: 0–100 mid-rank percentiles against all 142 team-matches, higher = better for the
+  team: `attack_space`, `attack_use` (shrunk rate), `defence_space`, `defence_behind`,
+  `defence_use` (opponents' shrunk rate). Grade intervals map the value's interval through the
+  same distribution (none for shrunk rates).
+- **Summary**: one line from the grade bands, naming a zone when its share is ≥ 15% above
+  average ("Created less than average space, mostly between the lines, and used it about as
+  often as most. Conceded more than average space; opponents used it rarely.").
+
+**Team profiles** pool every possession of a team (so a match with more possessions counts
+more), with the same intervals and grades against other teams, plus what follows an open-play
+regain (share with an exploited action, median seconds to it), zone shares conceded against the
+average team (`leaks_most`), and `small_sample` (< 4 matches: every team here). **Leak map**: per
+team, the share of the opponents' likely best options (weighted by their xSpace) in each cell
+of a 12 × 8 grid, and the lift over the average team. It is built from action moments; a
+heat map of all space conceded would need per-cell surfaces from the timeline.
+
+**Player ratings** (one row per player per team, over matches; per 90 = per 90 *live*
+minutes). Names and positions come from the PFF rosters (kloppy's tracking metadata leaves
+153 PFF starters, mostly wing-backs, as `UNK`) and IDSSE metadata, grouped GK / CB / FB / DM /
+CM / AM / W / ST by the position played most.
+
+| Role | Qualifies | Metrics (raw and `_shrunk`) |
+|---|---|---|
+| Ball carrier | ≥ 50 open-play passes + crosses | exploitation rate, mean likely gap, missed per 90 |
+| Runner | ≥ 110 live minutes (≈ 180 match minutes), not GK | space held (likely cell), high-xSpace receptions: per 90 and **per 90 in possession** (graded) |
+| Defender (experimental) | as runners | opponents' likely cells they were responsible for, per 90 out of possession (lower is better) |
+
+Runners are graded per 90 minutes *their team had the ball* (from the phase labels), because
+possession sides give their players more moments: Spain's players led the raw per-90 table.
+The flip side is that players of low-possession teams (Japan, Saudi Arabia) rise. The
+**responsible defender** at each action is the outfield defender who could reach the likely
+cell first (time to intercept, `likely_defender_id`): a zone of responsibility drawn by speed,
+not by tactics.
+
+Shrinkage is towards the position's mean: beta-binomial for rates, gamma-Poisson for per-90
+counts, normal-normal for mean gaps (priors fitted per position with ≥ 10 players, otherwise on
+everyone). Grades are percentiles among qualified players of the same position, if ≥ 5 qualify.
+
+**Caveats** (details in [validation.md](validation.md) V5). Player ratings don't agree with
+PFF analysts' grades, and the likely gap doesn't separate PFF's "better option" flags, so they
+describe space, not quality. The carrier "choice" grade (likely gap, absolute) runs against the
+"use" grade: players in rich areas face bigger gaps (Sané: use 99, choice 6); a relative gap
+would fix that. "Space behind" is value-weighted, so deep blocks concede *more* of it.
+
+### First results (all 71 matches)
+
+- **Teams.** Spain concede least (4.30 xT·m², 80% interval 4.11–4.47), then Qatar, Mexico, the
+  United States; Costa Rica (6.72), Iran and Poland most, mostly behind. Brazil, Mexico and
+  Germany create most. Over the 32 World Cup teams, xSpace created correlates with shots per
+  possession (r = 0.56) and conceded with shots conceded per possession (r = 0.45).
+- **Team-matches** (Spearman, 142): created and conceded are negatively related (−0.36), and
+  both follow possession share (±0.50): teams that dominate find more space and leave less.
+  Against shots per possession, xSpace created 0.20, conceded behind 0.24, and the shrunk
+  exploitation rates 0.34 (own) / 0.34 (opponents', against shots conceded).
+- **Players.** Space held per 90 by position (runners, median): ST 78, AM 59, W 41, CM 21,
+  FB 9, CB 2. Against the raw best cell, credit moves inside: full-backs 4,274 → 1,736
+  moments and wingers 16,162 → 7,303 (far-touchline space), central midfielders 1,331 → 4,689
+  and attacking midfielders 1,323 → 2,042. Leaders: Morata, Asensio, Richarlison, Lautaro
+  Martínez (ST); Musiala, Kramarić, Olmo (W); Gavi, Mac Allister, Bellingham (CM); Dumfries
+  (FB). Split-half (PFF, ≥ 90 live minutes per half, 121 players): r = 0.91, within position
+  0.74 (0.71 with the raw best cell). Space held is partly a team trait: possession sides
+  (Spain) supply more moments.
+
 ## Known limitations
 
 - **Independence**: defenders are treated as acting independently (same caveat as Pressing
@@ -389,7 +480,8 @@ player (180 per half leaves 13) would be needed for a firmer within-position che
    physics fitted to pass outcomes. V5 (ratings vs results) follows the ratings. The old,
    heavier lane blocking predicted danger (V3) better; kept as a known trade-off, to revisit
    with the own value model.
-4. **Ratings** — match ratings per team, team profiles, player ratings (carriers, runners).
+4. ~~**Ratings**~~ — done (section 12; V5 in validation.md). Open: a relative decision gap, an
+   area-only "behind", outside validation of player ratings.
 5. **PFF 2022 World Cup** — scale to 64 matches / 32 teams.
 6. **Own value model** — replace borrowed xT with a possession-value model fit on this data.
 7. **Web app** — match scrubber, team and player pages.

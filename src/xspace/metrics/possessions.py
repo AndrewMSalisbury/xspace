@@ -153,9 +153,13 @@ def build_possessions(match: MatchTracking, events: pd.DataFrame, phases: PhaseL
 def possessions_settings(params: PhysicsParams = DEFAULT_PARAMS,
                          timeline: TimelineConfig = DEFAULT_TIMELINE,
                          exploitation: ExploitationConfig = DEFAULT_EXPLOITATION) -> dict:
-    """Everything a possession file depends on: the timeline and action settings, plus the box."""
+    """Everything a possession or player file depends on: the timeline and action settings,
+    the box, and the players' credit thresholds."""
+    from xspace.metrics.players import MIN_BEST, MIN_LIKELY
+
     return {**settings_dict(params, timeline, exploitation),
-            "possessions": {"box_depth": BOX_DEPTH, "box_half_width": BOX_HALF_WIDTH}}
+            "possessions": {"box_depth": BOX_DEPTH, "box_half_width": BOX_HALF_WIDTH},
+            "players": {"min_best": MIN_BEST, "min_likely": MIN_LIKELY}}
 
 
 def possessions_metadata(source: str, match: MatchTracking, **extra) -> dict[str, str]:
