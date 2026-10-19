@@ -194,7 +194,8 @@ def space_from_arrays(att_pos: np.ndarray, att_vel: np.ndarray, def_pos: np.ndar
         receive = np.where(air, lofted.attack, receive)
         receive_players = np.where(air[None], lofted.attack_players, receive_players)
         reach = np.where(air, 1.0, reach)
-    value = np.maximum(xt_value(grid) - xt_value(b[None])[0], 0.0)
+    value = np.maximum(xt_value(grid, params.value_model)
+                       - xt_value(b[None], params.value_model)[0], 0.0)
     xspace = receive * reach * value
     zone = zone_cells(grid, shape)
 

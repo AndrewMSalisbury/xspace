@@ -24,6 +24,7 @@ broadcast tracking, another event provider).
 | V2 | Does reachability predict pass *success*? (and calibration) | [Done](#v2-pass-success-and-calibration) |
 | V3 | Does xSpace now predict danger in the next 10 s? | [Done, with a known trade-off](#decision-keep-the-calibrated-physics): old physics predicts it better |
 | V4 | Is the team signal stable? | [Done](#v4-is-the-team-signal-stable) |
+| Phase 6 | Own xT grid; V3 revisited | [Done](#phase-6-our-own-xt-grid-and-v3-revisited): grid kept as an option; blocking trade-off open |
 | V5 | Do ratings relate to results? | [Done](#v5-do-ratings-relate-to-results-phase-5): teams yes, players unvalidated |
 
 ## V2: pass success and calibration
@@ -301,23 +302,97 @@ xSpace and peak xSpace, and pool exploitation over more matches or shrink it tow
 (Split-half reliability measures noise, not meaning: a stable metric could still be stable for
 the wrong reason, e.g. tracking quality per stadium. V3 and V5 are the checks on meaning.)
 
+## Phase 6: our own xT grid, and V3 revisited
+
+### Our own xT grid (`value/xt_fit.py`, `scripts/fit_xt.py`)
+
+Fitted on **StatsBomb Open Data** (Data provided by StatsBomb): 2,435 men's matches from
+2003/04 on (big-five 2015/16 seasons, Barcelona's La Liga matches, tournaments; 4.2M open-play
+events), with the 2022 World Cup left out (it is the PFF validation set) and **Euro 2024, Copa
+América 2024 and Bundesliga 2023/24 (117 matches) held out**. 24 × 16 grid; shot quality is
+the zone's mean StatsBomb xG, shrunk towards a distance / angle model.
+
+**The chain matters.** Singh's chain ends a possession at every failed pass; in the data a
+possession often survives an opponent's touch, so that chain predicts half the xG teams go on
+to create. The default chain moves to the team's *next action in the same possession*. Scored
+on the held-out matches against the xG created from each action to the end of its possession:
+
+| Grid | MSE | R² | slope | mean (target 0.0176) | Spearman |
+|---|---|---|---|---|---|
+| Singh 12 × 8 (borrowed) | 0.004672 | 0.037 | 0.76 | 0.0196 | 0.216 |
+| own 24 × 16, Singh's chain | 0.004724 | 0.026 | 1.02 | 0.0079 | 0.218 |
+| **own 24 × 16** (interpolated) | **0.004654** | **0.041** | **0.97** | 0.0118 | 0.218 |
+
+Ours predicts the outcome better and is calibrated in its differences (slope ≈ 1; Singh's
+overstates them). Its level sits ~0.006 below the target, also on the training data, so it is
+an offset of the chain, not a shift between seasons; xSpace and xT gained only use differences,
+in which it cancels. Ours is more central: near the byline, wide cells are worth about half of
+Singh's and the six-yard area more (0.41 against 0.29).
+
+**But xSpace built on it is slightly worse** (V1 forward: PFF 1.115 against 1.137, IDSSE
+0.670 against 0.712; V3 shots: PFF 0.48% against 0.75%). The grid alone is the better location
+model (the `value` surface gains on V3 everywhere), so the loss is in how it combines with
+control and reach. Hypothesis, not tested: Singh's grid rewards wide space near goal, which is
+open and where passes go; ours puts value in the crowded centre. **Decision (by PLAN's rule): keep
+Singh's grid as the default**; ours stays available (`PhysicsParams.value_model = "own_24x16"`,
+`build_ablations.py --value-model`).
+
+### V3 revisited: the joint fit and reach fitted to V3
+
+The Phases 0–3 physics predicted danger better (V3 decision above). PLAN step 4: score the joint
+fit on V3, and fit reach to V3. The lever is `intercept_factor` (how often a defender who reaches
+the lane cuts the ball out; fitted 0.152 on attempted passes, which can't see lanes nobody
+tried). Swept with the other fitted parameters fixed; `scripts/select_v3.py` scores V3 on the
+training matches only (two halves, swapped), `scripts/validate.py --tag` on the test matches:
+
+| Physics | V2 log loss | V1 fwd PFF | V1 fwd IDSSE | V3 shot PFF | V3 box PFF | V3 shot IDSSE | V3 box IDSSE | V3 shot, train |
+|---|---|---|---|---|---|---|---|---|
+| calibrated (`intercept_factor` 0.152) | **0.351** | 1.137 | 0.712 | 0.75 | 0.33 | 0.95 | −0.13 | 0.67 |
+| 0.3 | 0.355 | 1.153 | 0.721 | 0.81 | 0.40 | 0.98 | −0.14 | 0.74 |
+| 0.5 | 0.364 | **1.163** | 0.727 | 0.89 | 0.51 | 1.03 | −0.14 | 0.85 |
+| 0.75 | 0.382 | 1.161 | 0.792 | 0.98 | 0.66 | 1.10 | −0.14 | 0.99 |
+| 1.0 | 0.409 | 1.148 | 0.789 | 1.06 | 0.80 | 1.20 | −0.09 | 1.13 |
+| joint fit | 0.371 | 1.152 | 0.687 | 1.01 | 0.59 | 1.21 | −0.06 | 1.00 |
+| Phases 0–3 | 0.633 | 1.074 | **0.804** | **1.25** | **1.16** | **1.82** | **0.70** | **1.65** |
+
+(V2: held-out completion log loss, lower is better; V1: nats over the distance prior; V3: %
+log-loss gain of total xSpace over ball position.)
+
+- Heavier blocking helps V3 steadily and **V1 too** (forward passes, both sources, to ~0.75):
+  where passes go and what follows both see the lanes nobody tried. It costs V2, which only sees
+  attempted passes: +0.013 at 0.5, +0.031 at 0.75, +0.057 at 1.0 (all far below 0.633).
+- No setting reaches the Phases 0–3 physics on V3. What it has beyond heavier interception is
+  `lane_combine = "product"` (every point of a lane an independent chance) and a slow ball.
+- The joint fit sits between 0.5 and 0.75 on V3 and is worse on IDSSE V1.
+
+**Decision (2026-10-19, Andrew): adopt `intercept_factor` 0.75.** V2 only sees passes players
+chose to try, so it is biased towards light blocking; V1 and V3 see the lanes nobody tried, and
+both improve. Every output was rebuilt; xSpace roughly halves (median best cell 0.011 → 0.0061,
+team-match median 5.3 → 2.8 xT·m²) and the thresholds were rescaled to keep their meaning
+(`exploit_min` 0.006, `missed_best_min` 0.03, likely cells ≥ 0.0023). The rest of the gap to
+the Phases 0–3 physics on V3 (`lane_combine`, ball speed) is still open.
+
 ## V5: do ratings relate to results? (Phase 5)
 
 From `notebooks/ratings.ipynb`, on the ratings of `scripts/build_ratings.py`
 ([methodology.md](methodology.md) section 12). Nothing here was fitted, so there is no split.
 
 **Teams (32 World Cup teams, pooled over matches; Spearman).** The team-level numbers track
-results per possession:
+results per possession. Re-run after Phase 6 adopted heavier blocking (`intercept_factor`
+0.75); the first column is Phase 5's (0.152):
 
-| Rating | Against | ρ | p |
-|---|---|---|---|
-| xSpace created | shots per possession | 0.47 | 0.006 |
-| exploitation rate (shrunk) | shots per possession | 0.39 | 0.03 |
-| xSpace conceded | shots conceded per possession | 0.38 | 0.03 |
-| xSpace conceded behind | shots conceded per possession | 0.41 | 0.02 |
-| opponents' exploitation rate (shrunk) | shots conceded per possession | **0.66** | < 0.001 |
-| xSpace conceded | goal difference per match | −0.33 | 0.06 |
-| xSpace created | goal difference per match | 0.13 | 0.47 |
+| Rating | Against | ρ (0.152) | ρ (0.75) | p (0.75) |
+|---|---|---|---|---|
+| xSpace created | shots per possession | 0.47 | 0.40 | 0.02 |
+| exploitation rate (shrunk) | shots per possession | 0.39 | **0.65** | < 0.001 |
+| xSpace conceded | shots conceded per possession | 0.38 | 0.44 | 0.01 |
+| xSpace conceded behind | shots conceded per possession | 0.41 | 0.45 | 0.009 |
+| opponents' exploitation rate (shrunk) | shots conceded per possession | 0.66 | 0.61 | < 0.001 |
+| xSpace conceded | goal difference per match | −0.33 | −0.35 | 0.05 |
+| xSpace created | goal difference per match | 0.13 | 0.00 | 0.99 |
+
+Below, the numbers are Phase 5's (0.152) unless marked; the 0.75 re-run changes them little
+except where noted.
 
 **Team-matches (142; Spearman with the grades, higher = better for the team).** Weaker, as
 one match is noisy: space created 0.20 with shots per possession and 0.39 with box entries per
@@ -325,7 +400,9 @@ possession; the shrunk exploitation rate 0.34 with shots; opponents' use −0.34
 conceded. Nothing relates to the match's goal difference beyond ±0.14. Space created and
 conceded both follow possession share (±0.50): dominant teams find more space and leave less.
 
-**Low blocks: the sanity check fails as posed.** PLAN expected teams that defend deep to concede
+**Low blocks: the sanity check fails as posed** (at 0.152; with heavier blocking the
+relation weakens to ρ = −0.17, p = 0.34, so deep blocks no longer concede clearly *more*).
+ PLAN expected teams that defend deep to concede
 little space *behind*. With the opponent's ball in the middle third, a deeper back line goes
 with *more* xSpace behind (ρ = −0.42 between line height and space behind, p = 0.02; Costa Rica
 defend deepest, 31.8 m from goal, and concede most) and much more in front (ρ = −0.87).
@@ -346,7 +423,8 @@ evidence for either, but it means the player ratings have no outside support yet
 better option. The likely gap doesn't separate them (median 0.0018 flagged vs 0.0019, AUC
 0.50; raw decision gap 0.47). `missed` does, weakly: 3.7% of flagged actions against 1.9%. When
 PFF names the better player (239 times), it is the owner of our likely cell 22% of the time
-(16% for the raw best cell). Our "better option" is the most valuable reachable space; theirs
+(16% for the raw best cell). At 0.75: AUC 0.525 for the likely gap, `missed` 3.1% against
+1.6%, the named player is our likely owner 24% of the time. Our "better option" is the most valuable reachable space; theirs
 includes holding, crossing and safer passes, so overlap was always going to be partial, but
 the likely gap is not a measure of decision quality as PFF sees it.
 
@@ -370,5 +448,8 @@ V1–V3, and anything that doesn't is reported with a hypothesis.
   entries. The Phases 0–3 physics predicts danger better everywhere. That is accepted for now
   ([decision](#decision-keep-the-calibrated-physics)) and revisited in Phase 6.
 - **V4:** done. Team xSpace is stable; the exploitation rate is too noisy per team.
-- **V5:** done. Team ratings track shots for and against (ρ 0.38–0.66 over 32 teams);
-  player ratings don't agree with PFF's grades, and the low-block check fails as posed.
+- **V5:** done. Team ratings track shots for and against (ρ 0.40–0.65 over 32 teams at the
+  adopted physics); player ratings don't agree with PFF's grades.
+- **Phase 6:** our own xT grid predicts possession outcomes better but makes xSpace slightly
+  worse, so Singh's grid stays; heavier lane blocking (`intercept_factor` 0.75) adopted for
+  V1 / V3 at a cost in V2.

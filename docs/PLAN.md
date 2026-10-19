@@ -546,6 +546,22 @@ Every team-match has a rating; leaderboards pass expert eye-test; uncertainty sh
 - `value/xt_fit.py`, fitted grid in the package with provenance, comparison in
   `docs/validation.md`.
 
+### Outcome (2026-10-19)
+
+- **Step 1** (own xT): `value/xt_fit.py`, `scripts/fit_xt.py`, `xt_own_24x16.json`, fitted on
+  2,435 StatsBomb Open Data matches (2022 World Cup excluded) with a possession chain (the
+  team's next action in the same possession; Singh's chain under-counts by half). It predicts
+  held-out possession outcomes better than Singh's grid but makes xSpace slightly worse on V1
+  and V3, so **Singh's grid stays the default**; ours is `value_model = "own_24x16"`. PFF events
+  weren't added (≈ 2% more data).
+- **Step 2** (context-aware model): not done (stretch).
+- **Steps 3–4**: the joint fit and an `intercept_factor` sweep scored on V1–V3. **Adopted
+  `intercept_factor` 0.75** (Andrew, 2026-10-19): V1 and V3 improve, V2 log loss 0.351 →
+  0.382. Phases 2–5 rebuilt, thresholds rescaled; V5 team correlations 0.40–0.65. The rest of
+  the V3 gap to the Phases 0–3 physics (`lane_combine`, ball speed) is open.
+
+Details: [validation.md](validation.md#phase-6-our-own-xt-grid-and-v3-revisited).
+
 ### Definition of done
 
 Own model ≥ borrowed xT on validation V1–V3, or a documented reason to keep the borrowed one.

@@ -3,6 +3,12 @@
 Working notes on how Expected Space (xSpace) is computed, what it assumes, and what's next.
 Every tunable setting (physics, grids, sampling, paths) lives in `src/xspace/config.py`.
 
+> **Scale note (Phase 6, 2026-10-19).** `intercept_factor` is now 0.75 (heavier lane blocking,
+> chosen on V1 / V3: [validation.md](validation.md#phase-6-our-own-xt-grid-and-v3-revisited)).
+> xSpace roughly halves and thresholds were rescaled. The "First results" in sections 8–11 were
+> measured at 0.152 and are kept as they were; their absolute values are on the old scale.
+> Section 12 and V5 carry the current numbers.
+
 ## 1. Preprocessing
 
 - Any kloppy provider is converted to the Second Spectrum coordinate system (metres, centre spot at
@@ -432,10 +438,14 @@ would fix that. "Space behind" is value-weighted, so deep blocks concede *more* 
 
 ### First results (all 71 matches)
 
-- **Teams.** Spain concede least (4.30 xT·m², 80% interval 4.11–4.47), then Qatar, Mexico, the
-  United States; Costa Rica (6.72), Iran and Poland most, mostly behind. Brazil, Mexico and
-  Germany create most. Over the 32 World Cup teams, xSpace created correlates with shots per
-  possession (r = 0.56) and conceded with shots conceded per possession (r = 0.45).
+- **Teams** (current physics, `intercept_factor` 0.75). Spain concede least (2.49 xT·m², 80%
+  interval 2.39–2.58), then Denmark, Qatar, the United States; Costa Rica, Iran and Poland
+  still concede most. Germany, Brazil and Mexico create most. Over the 32 World Cup teams
+  (Spearman): created vs shots per possession 0.40, conceded vs shots conceded 0.44, shrunk
+  exploitation rate vs shots 0.65 (V5). At 0.152 Spain conceded 4.30 and Costa Rica 6.72.
+- The bullets below were measured at 0.152; the leaders by space held per 90 *in possession*
+  are now Richarlison, Asensio, Al-Shehri, Morata (ST); Musiala, Tadić, Kramarić (W); Gavi,
+  Mac Allister, Busquets (CM); Junya Ito, Dumfries (FB).
 - **Team-matches** (Spearman, 142): created and conceded are negatively related (−0.36), and
   both follow possession share (±0.50): teams that dominate find more space and leave less.
   Against shots per possession, xSpace created 0.20, conceded behind 0.24, and the shrunk

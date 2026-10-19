@@ -35,8 +35,9 @@ from xspace.phases.possession import PhaseLabels
 
 MIN_BEST = DEFAULT_EXPLOITATION.exploit_min  # a best cell worth crediting (≈ median frame's best)
 # The likely cell is worth less (it trades value for distance): its median over actions is
-# 0.0027, where the best cell's is 0.011. The same meaning, "at least a median option":
-MIN_LIKELY = 0.003
+# 0.0023, where the best cell's is 0.0061 (intercept_factor 0.75; 0.0027 and 0.011 at 0.152).
+# The same meaning, "at least a median option":
+MIN_LIKELY = 0.0023
 
 
 def minutes_played(match: MatchTracking, phases: PhaseLabels | None = None) -> pd.DataFrame:

@@ -2,16 +2,33 @@
 
 Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 [docs/methodology.md](docs/methodology.md) (how everything is computed) and
-[docs/validation.md](docs/validation.md) (Phase 4 and V5 results).
+[docs/validation.md](docs/validation.md) (Phases 4–6 results).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Branches | PRs #1–#6 merged (#6 on 2026-10-18). Phase 5 on `phase5-ratings`, PR #7. Phase 6 branches from `main` once it merges. |
-| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ · 5 ✅ pending Andrew's leaderboard eye test · **6 next** |
-| Tests | 74 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches; actions (likely cell, responsible defender), possessions, players rebuilt at `ba096a4`; ratings in `data/processed/ratings/` |
+| Branches | PRs #1–#6 merged. Phase 5: PR #7 (open; Andrew's eye test done 2026-10-19). Phase 6 on `phase6-value-model`, stacked on `phase5-ratings`. |
+| Phase | 0–5 ✅ · 6 ✅ (stretch step 2 not done) · **7 next** (web app) |
+| Tests | 79 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches rebuilt at `intercept_factor` 0.75 (timeline `c60ae35`, actions `c464689`, possessions / players / ratings `5aaba84`); StatsBomb Open Data reduced in `data/raw/statsbomb/` (43 MB) |
+
+## What Phase 6 did (validation.md "Phase 6")
+
+- **Own xT grid** (`value/xt_fit.py`, `scripts/download_statsbomb.py`, `scripts/fit_xt.py`,
+  `value/xt_own_24x16.json`): a Markov xT on 2,435 StatsBomb matches whose next state is the
+  team's next action in the same possession. Better than Singh's grid at predicting held-out
+  possession outcomes, but xSpace on it is slightly worse on V1 / V3: **Singh's grid stays
+  the default**; `PhysicsParams.value_model` selects either (settings hashes unchanged for the
+  default).
+- **Heavier lane blocking adopted**: `intercept_factor` 0.152 → 0.75 (Andrew's call). V1 and V3
+  improve, V2 completion log loss 0.351 → 0.382. Everything rebuilt; xSpace roughly halves;
+  thresholds rescaled (`exploit_min` 0.006, `missed_best_min` 0.03, `MIN_LIKELY` 0.0023).
+- **V5 at the new physics**: team exploitation rate vs shots per possession ρ 0.65 (was 0.39);
+  the low-block paradox fades (ρ −0.17, n.s.); player ratings still don't match PFF grades.
+- **Tooling**: `build_ablations.py` / `validate.py` take `--joint`, `--set k=v --tag t` and
+  `--value-model`; `select_v3.py` scores V3 on training matches only. Old ablations are kept
+  per setting (`ablations_if015` is the Phase 4–5 physics).
 
 ## What Phase 5 did (methodology.md section 12, validation.md V5)
 
@@ -114,13 +131,12 @@ Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Merge PR #7 (Phase 5) after Andrew's eye test of `notebooks/ratings.ipynb` (PLAN's
-   definition of done: leaderboards pass an expert eye test).
-2. Andrew: the video eye test (open issue 6).
-3. Phase 5 follow-ups, if wanted:
-   - a relative decision gap: the absolute one penalises carriers in rich areas;
-   - an area-only "behind", to test the low-block hypothesis (validation.md V5);
-   - a heat map of all space conceded: needs per-cell sums in the timeline (rebuild); the
-     leak map stands in.
-4. Phase 6 (own value model). It also revisits V3 (danger) and may help the player ratings,
-   which have no outside support yet.
+1. Merge PR #7 (Phase 5), then the Phase 6 PR (stacked on it).
+2. Andrew: the video eye test (delayed).
+3. Phase 7: the web app (PLAN). Check the PFF licence before publishing PFF-derived views.
+4. Optional, any time:
+   - the rest of the V3 gap: sweep `lane_combine = "product"` / ball speed (~10 min a setting
+     with `build_ablations.py --set ... --tag ...`; `lane_combine` needs a string override);
+   - Phase 6 step 2 (a context-aware value model);
+   - refresh `notebooks/moments.ipynb` and `timeline_sanity.ipynb` (their outputs are at 0.152);
+   - a relative decision gap; an area-only "behind".

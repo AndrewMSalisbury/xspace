@@ -29,7 +29,8 @@ RATINGS_DIR = CACHE_DIR / "ratings"
 class PhysicsParams:
     """Defaults marked (fit) were fitted to 45k PFF pass outcomes (Phase 4, task V2:
     scripts/calibrate.py, docs/validation.md) within physically plausible bounds; the others
-    are fixed. UNCALIBRATED_PARAMS keeps the earlier hand-set values."""
+    are fixed, except `intercept_factor`, chosen on V1 / V3 in Phase 6. UNCALIBRATED_PARAMS
+    keeps the earlier hand-set values."""
 
     reaction_time: float = 0.43  # s before a player can change course (fit)
     max_speed: float = 5.27  # m/s, average max running speed (fit)
@@ -47,9 +48,11 @@ class PhysicsParams:
     # "max": each defender gets one chance, at their best point; defenders are independent.
     lane_combine: str = "max"
     # Chance that a defender who reaches the lane in time actually cuts the ball out (it can
-    # still go through their legs, off a boot, ...). 1 = always. The fitted value is low: it
-    # also absorbs tracking noise and that players rarely try lanes that are really shut.
-    intercept_factor: float = 0.152  # (fit)
+    # still go through their legs, off a boot, ...). 1 = always. Fitted to pass completion it
+    # is 0.152 (calibration.json), but completion only sees passes players chose to try, so it
+    # can't see lanes nobody tried. 0.75 (Phase 6, docs/validation.md) predicts where passes go
+    # (V1) and danger (V3) better, at a cost in completion (V2 log loss 0.351 -> 0.382).
+    intercept_factor: float = 0.75
     # Lofted passes: flight time air_time + distance / air_speed, can't be cut out in flight,
     # contested where they land with every player's control rate x air_lambda_factor. With
     # air_speed > 0, xSpace takes, per cell, whichever of the ground and lofted ball is likelier
@@ -64,6 +67,9 @@ class PhysicsParams:
     # no pitch control (level is onside; the margin absorbs ~0.5 m tracking noise).
     # Set to float('inf') to switch offside off.
     offside_margin: float = 0.5  # m
+    # Value surface (value/xt.py VALUE_MODELS). Not physics, but it travels with the physics to
+    # every worker. Settings hashes leave the name out and hash the grid file instead.
+    value_model: str = "singh_12x8"
 
 
 DEFAULT_PARAMS = PhysicsParams()
@@ -97,13 +103,13 @@ class ExploitationConfig:
     cell_size: float = 1.0  # m; fine enough to read xSpace at a single target point
     skip_flags: int = 0b1111  # as TimelineConfig: release frames with these flags are skipped
     # exploited = completed, into a cell in the top (1 - exploit_rank) of the frame's positive
-    # xSpace, worth at least exploit_min (≈ the median frame's best cell: 0.011 with the
-    # calibrated physics; 0.005 before)
+    # xSpace, worth at least exploit_min (≈ the median frame's best cell: 0.0061 with
+    # intercept_factor 0.75; 0.011 at 0.152; 0.005 with the Phases 0-3 physics)
     exploit_rank: float = 0.9
-    exploit_min: float = 0.01
-    # missed = the frame's best cell was big (≈ top 5% of frames: 0.045 calibrated; 0.02
-    # before) but the choice was in the bottom `missed_rank` of the frame's positive xSpace
-    missed_best_min: float = 0.045
+    exploit_min: float = 0.006
+    # missed = the frame's best cell was big (≈ top 5% of frames: 0.0295 now; 0.045 at 0.152;
+    # 0.02 before) but the choice was in the bottom `missed_rank` of the frame's positive xSpace
+    missed_best_min: float = 0.03
     missed_rank: float = 0.5
     # likely = the best cell once xSpace is weighted by how likely a pass that far is:
     # exp(−likely_gamma · distance from the ball / 10 m), the V1 distance prior (γ fitted for
@@ -127,7 +133,7 @@ def settings_dict(physics: PhysicsParams = DEFAULT_PARAMS,
     from xspace.phases import possession, quality
     from xspace.value import xt
 
-    xt_grid = (Path(xt.__file__).parent / "xt_12x8.json").read_bytes()
+    xt_grid = xt.grid_bytes(physics.value_model)
     extra = {}
     if exploitation is not None:
         refine = inspect.signature(sync.refine_release_frames).parameters
@@ -138,7 +144,7 @@ def settings_dict(physics: PhysicsParams = DEFAULT_PARAMS,
                                if v.default is not inspect.Parameter.empty},
         }
     return {
-        "physics": asdict(physics),
+        "physics": {k: v for k, v in asdict(physics).items() if k != "value_model"},
         "timeline": {k: v for k, v in asdict(timeline).items() if k != "chunk_size"},
         "phases": {
             "setpiece_window_s": possession.SETPIECE_WINDOW_S,

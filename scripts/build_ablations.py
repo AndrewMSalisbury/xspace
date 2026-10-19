@@ -2,6 +2,9 @@
 
     uv run python scripts/build_ablations.py            # the physics in config.py (calibrated)
     uv run python scripts/build_ablations.py --default  # UNCALIBRATED_PARAMS (Phases 0-3)
+    uv run python scripts/build_ablations.py --value-model own_24x16  # another xT grid
+    uv run python scripts/build_ablations.py --joint    # the joint fit's physics (joint.json)
+    uv run python scripts/build_ablations.py --set intercept_factor=0.5 --tag if050  # a sweep
 
 The calibrated run switches on the fitted lofted ball (calibration.json) so that the
 `xspace_lofted` surface can be compared with ground-only `xspace`; the Phases 0-3 physics had no
@@ -50,18 +53,38 @@ def main() -> None:
     ap.add_argument("--match", nargs="+", default=["all"])
     ap.add_argument("--default", action="store_true",
                     help="use the uncalibrated Phases 0-3 physics")
+    ap.add_argument("--joint", action="store_true",
+                    help="use the joint fit's physics (validation/joint.json, not adopted)")
+    ap.add_argument("--value-model", default=DEFAULT_PARAMS.value_model,
+                    help="xT grid (value/xt.py VALUE_MODELS); non-default ones get their own "
+                         "output folder, ablations[_default]_<model>")
+    ap.add_argument("--set", nargs="+", default=[], metavar="KEY=VALUE",
+                    help="override physics parameters (floats)")
+    ap.add_argument("--tag", help="output folder ablations_<tag> (needed with --set)")
     ap.add_argument("--hz", type=float, default=1.0, help="V3 frame sample rate")
     ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1))
     args = ap.parse_args()
 
     if args.default:
         params = UNCALIBRATED_PARAMS
+    elif args.joint:
+        fit = json.loads((VALIDATION_DIR / "joint.json").read_text())["fitted"]
+        params = replace(DEFAULT_PARAMS, **fit)
     else:
         fit = json.loads((VALIDATION_DIR / "calibration.json").read_text())["fitted"]
         params = replace(DEFAULT_PARAMS, **{k: fit[k] for k in
                                             ("air_speed", "air_time", "air_lambda_factor")})
+    params = replace(params, value_model=args.value_model,
+                     **{k: float(v) for k, v in (kv.split("=") for kv in args.set)})
+    if args.set and not args.tag:
+        ap.error("--set needs --tag")
     print(params)
-    out_dir = VALIDATION_DIR / ("ablations_default" if args.default else "ablations")
+    out_dir = VALIDATION_DIR / ("ablations_default" if args.default
+                                else "ablations_joint" if args.joint else "ablations")
+    if args.value_model != DEFAULT_PARAMS.value_model:
+        out_dir = out_dir.with_name(f"{out_dir.name}_{args.value_model}")
+    if args.tag:
+        out_dir = VALIDATION_DIR / f"ablations_{args.tag}"
     out_dir.mkdir(parents=True, exist_ok=True)
     cell = DEFAULT_TIMELINE.cell_size
 
@@ -80,7 +103,7 @@ def main() -> None:
             frames = frames[status == 0]
             side = pm.phases.possession_side[frames].astype(int)
             res = run(pool, m, frames, side, None, cell, params)
-            df = ab.frame_rows(m, frames, side, res)
+            df = ab.frame_rows(m, frames, side, res, params.value_model)
             labels = ab.danger_labels(m, pm.events, pm.phases, frames)
             df = pd.concat([df, labels], axis=1)
             df.insert(0, "possession_id", pm.phases.possession_id[frames])
