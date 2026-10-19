@@ -29,7 +29,8 @@ RATINGS_DIR = CACHE_DIR / "ratings"
 class PhysicsParams:
     """Defaults marked (fit) were fitted to 45k PFF pass outcomes (Phase 4, task V2:
     scripts/calibrate.py, docs/validation.md) within physically plausible bounds; the others
-    are fixed. UNCALIBRATED_PARAMS keeps the earlier hand-set values."""
+    are fixed, except `intercept_factor`, chosen on V1 / V3 in Phase 6. UNCALIBRATED_PARAMS
+    keeps the earlier hand-set values."""
 
     reaction_time: float = 0.43  # s before a player can change course (fit)
     max_speed: float = 5.27  # m/s, average max running speed (fit)
@@ -47,9 +48,11 @@ class PhysicsParams:
     # "max": each defender gets one chance, at their best point; defenders are independent.
     lane_combine: str = "max"
     # Chance that a defender who reaches the lane in time actually cuts the ball out (it can
-    # still go through their legs, off a boot, ...). 1 = always. The fitted value is low: it
-    # also absorbs tracking noise and that players rarely try lanes that are really shut.
-    intercept_factor: float = 0.152  # (fit)
+    # still go through their legs, off a boot, ...). 1 = always. Fitted to pass completion it
+    # is 0.152 (calibration.json), but completion only sees passes players chose to try, so it
+    # can't see lanes nobody tried. 0.75 (Phase 6, docs/validation.md) predicts where passes go
+    # (V1) and danger (V3) better, at a cost in completion (V2 log loss 0.351 -> 0.382).
+    intercept_factor: float = 0.75
     # Lofted passes: flight time air_time + distance / air_speed, can't be cut out in flight,
     # contested where they land with every player's control rate x air_lambda_factor. With
     # air_speed > 0, xSpace takes, per cell, whichever of the ground and lofted ball is likelier
