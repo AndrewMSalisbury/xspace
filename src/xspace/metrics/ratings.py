@@ -344,14 +344,14 @@ def summarise(row: pd.Series, avg_att: dict[str, float], avg_def: dict[str, floa
     zone = _lead_zone(row, "share_", avg_att)
     attack = f"Created {_band(row['grade_attack_space'])} space"
     if zone:
-        attack += f", especially {ZONE_WORDS[zone]}"
+        attack += f", mostly {ZONE_WORDS[zone]}"
     attack += f", and used it {use(row['grade_attack_use'])}."
     # Defence grades are "higher is better", so conceding a lot is a low grade.
     conceded = _band(100 - row["grade_defence_space"])
     zone = _lead_zone(row, "share_conceded_", avg_def)
     defence = f"Conceded {conceded} space"
     if zone:
-        defence += f", especially {ZONE_WORDS[zone]}"
+        defence += f", mostly {ZONE_WORDS[zone]}"
     defence += f"; opponents used it {use(100 - row['grade_defence_use'])}."
     return f"{attack} {defence}"
 

@@ -505,6 +505,16 @@ For team T in match M, open play only:
 - Notebook: tournament-wide leaderboards and team comparisons with sanity checks
   (e.g. do teams known for low blocks concede little "behind" space?).
 
+### Outcome so far (2026-10-18)
+
+`metrics/ratings.py` and `scripts/build_ratings.py` rate all 142 team-matches, 42 teams and
+the players (410 carriers, 319 runners), with intervals, shrinkage and grades
+([methodology.md](methodology.md) section 12). Changes from the plan above: ratings use the
+*likely* best cell (distance-weighted) for decision gaps and space held; the runner minimum is
+110 live minutes (≈ 180 match minutes); the space-conceded heat map is a leak map of
+opponents' likely options, since the timeline keeps no per-cell surfaces. Still to do: the
+leaderboard notebook and its sanity checks, the PFF grade benchmark, the defender rating.
+
 ### Definition of done
 
 Every team-match has a rating; leaderboards pass expert eye-test; uncertainty shown everywhere.

@@ -1,6 +1,6 @@
 # Handoff — Xspace
 
-Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
+Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 [docs/methodology.md](docs/methodology.md) (how everything is computed) and
 [docs/validation.md](docs/validation.md) (Phase 4 results).
 
@@ -8,10 +8,24 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 | | |
 |---|---|
-| Branches | PRs #1–#5 merged (Phase 4 = #5, 2026-10-09). Follow-up checks on `phase4-followups` (PR #6). Phase 5 branches from `main`. |
-| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ (V3 trade-off accepted) · **5 next** |
-| Tests | 63 passing (`pytest`, ~5 s), ruff clean |
-| Data | 71 matches; timelines, actions, possessions, players rebuilt with the calibrated, ground-only physics (hashes: timeline `1dd23ad89967`, actions `7faba5708c37`, possessions `51510fcd8820`); pass sets and ablations in `data/processed/validation/` |
+| Branches | PRs #1–#6 merged (#6 on 2026-10-18). Phase 5 on `phase5-ratings` (local, not pushed yet). |
+| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ · **5 in progress** |
+| Tests | 73 passing (`pytest`, ~8 s), ruff clean |
+| Data | 71 matches; actions rebuilt with the likely cell, possessions / players with the new thresholds; ratings in `data/processed/ratings/` |
+
+## What Phase 5 has so far (methodology.md section 12)
+
+- **Likely best cell** on every action: xSpace × `exp(−d / 10 m)` (V1 prior). Edge-row best
+  cells 27% → 0.7%. `likely_gap` and space held (`n_likely_space`, threshold 0.003) use it.
+  The players' thresholds are now in the possession settings hash.
+- **`metrics/ratings.py`, `scripts/build_ratings.py`** (~10 s): team-match ratings (attack /
+  defence, 80% possession-bootstrap intervals, 5 grades, summary line), team profiles, leak
+  maps, player ratings (carriers, runners; empirical-Bayes shrinkage towards position means).
+- **Player directory** (`io.lineups.player_directory`): PFF rosters fix 153 `UNK` starters;
+  cached in `ratings/directory.parquet`.
+- **First checks**: Spain concede least, Costa Rica most; team xSpace created / conceded vs
+  shots per possession r = 0.56 / 0.45 (32 teams); space created follows possession share
+  (0.50). Runners: ST > AM > W > CM > FB > CB; within-position split-half 0.74.
 
 ## What Phase 4 changed
 
@@ -68,15 +82,15 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
    passes). The fit used PFF only.
 3. **Touchline best cells** (30% of frames in the edge row, 17% on the far side): eye-checked
    2026-10-09 (`methodology.md` section 8). Real space, but a ~67 m ground pass almost nobody
-   plays. Harmless for totals and `missed`; biases `decision_gap` and space held. **Phase 5:**
-   weight the best cell by the V1 distance prior before using it in ratings.
+   plays. Harmless for totals and `missed`; biases `decision_gap` and space held. **Done
+   (Phase 5):** ratings use the likely cell (distance-weighted).
 4. **Findings that changed with calibration:**
    - the transition "space behind" effect reversed;
    - early-possession xSpace predicts shots less strongly;
    - player split-half re-measured: space held per 90 r = 0.92 (32 players), 0.70 within
      position (`methodology.md` section 11).
-5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). **For Phase 5:**
-   pool it over matches or shrink it towards the mean (empirical Bayes); don't rank it raw.
+5. **Exploitation rate is unreliable per team** (V4 reliability 0.37–0.54). **Done
+   (Phase 5):** shrunk with an empirical-Bayes beta-binomial before grading.
 6. Carried over:
    - the video eye-test checklist (`scripts/eye_test.py`): **Andrew is doing this by hand**;
    - PFF 3845 estimated players;
@@ -86,9 +100,12 @@ Last updated: 2026-10-09. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Merge PR #6 (follow-up checks; docs only).
+1. Phase 5, remaining:
+   - leaderboard notebook with sanity checks (low-block teams and space behind; summaries
+     read right);
+   - PFF grade benchmark for players (event `grades`, `passerGrade`, ...);
+   - V5 write-up (ratings vs results) in validation.md;
+   - defender rating (experimental);
+   - decide whether space held should be normalised by team possession (Spain's players lead).
 2. Andrew: the video eye test (open issue 6).
-3. Phase 5 (ratings), on a new branch from `main`:
-   - lean on team xSpace (stable), not the exploitation rate, which needs pooling / shrinkage;
-   - frame ratings as space / progression, not danger (V3 decision);
-   - weight the best cell by the distance prior before it feeds `decision_gap` / space held.
+3. Deferred: a heat map of all space conceded needs per-cell sums in the timeline (rebuild).
