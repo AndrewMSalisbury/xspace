@@ -134,8 +134,12 @@ def fake_match(home: str, away: str, seed: int):
     pl = pd.DataFrame({
         "team_side": np.repeat([0, 1], 4).astype(np.int8),
         "player_id": pd.array(players, dtype="string"), "position": "UNK",
-        "minutes": 60.0, "n_actions": 10, "n_exploited": 1, "n_missed": 0, "xt_gained": 0.1,
+        "minutes": 60.0, "minutes_in_possession": rng.uniform(20, 40, 8),
+        "minutes_out_of_possession": 25.0,
+        "n_actions": 10, "n_exploited": 1, "n_missed": 0, "xt_gained": 0.1,
         "n_likely_space": rng.integers(0, 30, 8), "n_likely_found": 1, "n_best_space": 5,
+        "n_likely_conceded": rng.integers(0, 20, 8), "likely_conceded": 0.1,
+        "n_likely_conceded_found": 1,
     })
     return possessions, timeline, actions, pl
 
@@ -222,6 +226,13 @@ def test_player_ratings():
                                df["n_likely_space"] / (df["minutes"] / 90))
     st = df[df["position_group"] == "ST"]
     assert st["grade_runner_space"].notna().all()
+    np.testing.assert_allclose(df["space_held_per90_poss"],
+                               df["n_likely_space"] / (df["minutes_in_possession"] / 90))
+    np.testing.assert_allclose(df["conceded_per90_def"],
+                               df["n_likely_conceded"] / (df["minutes_out_of_possession"] / 90))
+    # Conceding more is a lower grade.
+    cb = df[df["position_group"] == "CB"].sort_values("conceded_per90_def_shrunk")
+    assert cb["grade_defender_space"].is_monotonic_decreasing
     assert df.loc[df["carrier"], "grade_carrier_use"].between(0, 100).all()
     # Too few qualified players in a position: no grades.
     few = player_ratings(players, acts, directory, RatingsConfig(

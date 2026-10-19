@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from test_timeline import FPS, random_match
+from test_timeline import FPS, labels, random_match
 
 from xspace.metrics.players import build_players, minutes_played
 
@@ -20,6 +20,8 @@ def actions_for():
         # The likely cell moves the second action's credit from h3 (far touchline) to h4.
         "likely": [0.03, 0.02, 0.002, 0.5], "likely_gap": [0.0, 0.02, 0.001, 0.0],
         "likely_owner_id": pd.array(["h3", "h4", "h3", "h3"], dtype="string"),
+        # a2 is quickest to the first two likely cells; the third is below MIN_LIKELY.
+        "likely_defender_id": pd.array(["a2", "a2", "a5", "a2"], dtype="string"),
     })
 
 
@@ -30,6 +32,11 @@ def test_minutes():
     np.testing.assert_allclose(m["h0"], match.n_frames / FPS / 60)
     np.testing.assert_allclose(m["h5"], 100 / FPS / 60)
     assert len(m) == 22
+    split = minutes_played(match, labels(match.n_frames)).set_index("player_id")
+    np.testing.assert_allclose(split.loc["h0", "minutes_in_possession"],
+                               (match.n_frames // 2 - 5) / FPS / 60)
+    np.testing.assert_allclose(split.loc["a0", "minutes_in_possession"],
+                               split.loc["h0", "minutes_out_of_possession"])
 
 
 def test_credit():
@@ -51,3 +58,7 @@ def test_credit():
     np.testing.assert_allclose(h1["likely_gap"], 0.01)
     assert (h3["n_likely_space"], h3["n_likely_found"]) == (1, 1)
     assert (df.loc["h4", "n_likely_space"], df.loc["h4", "n_likely_found"]) == (1, 1)
+    a2 = df.loc["a2"]
+    assert (a2["n_likely_conceded"], a2["n_likely_conceded_found"]) == (2, 2)
+    np.testing.assert_allclose(a2["likely_conceded"], 0.05)
+    assert a2["team_side"] == 1 and df.loc["a5", "n_likely_conceded"] == 0

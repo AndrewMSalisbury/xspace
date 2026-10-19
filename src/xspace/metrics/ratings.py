@@ -485,9 +485,13 @@ def player_ratings(players: pd.DataFrame, act: pd.DataFrame, directory: pd.DataF
     `match_id`. Per 90 means per 90 *live* minutes (a match has about 55-60).
 
     Ball carriers (≥ `min_carrier_passes` open-play passes + crosses): exploitation rate,
-    mean likely gap (lower is better), missed chances per 90. Runners (≥ `min_runner_minutes`):
-    space held per 90 (team-mates' actions whose likely best cell they owned) and high-xSpace
-    receptions per 90 (team-mates' completed actions into their cell worth ≥ `high_xspace`).
+    mean likely gap (lower is better), missed chances per 90. Runners (≥ `min_runner_minutes`,
+    not GK): space held (team-mates' actions whose likely best cell they owned) and high-xSpace
+    receptions (team-mates' completed actions into their cell worth ≥ `high_xspace`), per 90
+    and per 90 *in possession* (`_poss`): a team that keeps the ball gives its players more
+    moments, so the graded version divides by the time their team had it. Defenders
+    (experimental; ≥ `min_runner_minutes`, not GK): opponents' likely cells they were quickest
+    to (`conceded_per90_def`, per 90 out of possession; lower is better).
     Each has a raw and a `_shrunk` value; grades are percentiles among qualified players of
     the same position group, on shrunk values (none if fewer than `min_graded` qualify).
     """
@@ -502,8 +506,11 @@ def player_ratings(players: pd.DataFrame, act: pd.DataFrame, directory: pd.DataF
     main = (known.groupby([*keys, "position_group"])["minutes"].sum().reset_index()
             .sort_values("minutes").groupby(keys).tail(1).set_index(keys)["position_group"])
     names = pm.dropna(subset=["name"]).groupby(keys)["name"].first()
-    sums = pm.groupby(keys)[["minutes", "n_actions", "n_exploited", "n_missed", "xt_gained",
-                             "n_likely_space", "n_likely_found", "n_best_space"]].sum()
+    sums = pm.groupby(keys)[["minutes", "minutes_in_possession", "minutes_out_of_possession",
+                             "n_actions", "n_exploited", "n_missed", "xt_gained",
+                             "n_likely_space", "n_likely_found", "n_best_space",
+                             "n_likely_conceded", "likely_conceded",
+                             "n_likely_conceded_found"]].sum()
     df = sums.join(pm.groupby(keys)["match_id"].nunique().rename("matches"))
     df = df.join(names).join(main)
     df["position_group"] = df["position_group"].fillna("UNK")
@@ -528,22 +535,35 @@ def player_ratings(players: pd.DataFrame, act: pd.DataFrame, directory: pd.DataF
     df["receptions_per90"] = df["n_high_receptions"] / p90
     df["exploit_rate_shrunk"] = _shrink_by_group(df, shrink_rate, ["n_exploited", "n_actions"],
                                                  config)
-    df["p90"] = p90
-    for col, count in (("missed_per90", "n_missed"), ("space_held_per90", "n_likely_space"),
-                       ("receptions_per90", "n_high_receptions")):
-        df[f"{col}_shrunk"] = _shrink_by_group(df, shrink_count_rate, [count, "p90"], config)
+    in90 = df["minutes_in_possession"] / 90
+    out90 = df["minutes_out_of_possession"] / 90
+    df["space_held_per90_poss"] = df["n_likely_space"] / in90
+    df["receptions_per90_poss"] = df["n_high_receptions"] / in90
+    df["conceded_per90_def"] = df["n_likely_conceded"] / out90
+    df["conceded_xspace_per90_def"] = df["likely_conceded"] / out90
+    df["p90"], df["in90"], df["out90"] = p90, in90, out90
+    for col, count, exposure in (
+            ("missed_per90", "n_missed", "p90"),
+            ("space_held_per90", "n_likely_space", "p90"),
+            ("receptions_per90", "n_high_receptions", "p90"),
+            ("space_held_per90_poss", "n_likely_space", "in90"),
+            ("receptions_per90_poss", "n_high_receptions", "in90"),
+            ("conceded_per90_def", "n_likely_conceded", "out90")):
+        df[f"{col}_shrunk"] = _shrink_by_group(df, shrink_count_rate, [count, exposure], config)
     within = act.groupby(["source", "team", "player_id"])["likely_gap"].var().mean()
     df["likely_gap_shrunk"] = _shrink_by_group(df, shrink_mean, ["likely_gap", "n_gap"], config,
                                                within_var=float(within))
-    df = df.drop(columns="p90")
+    df = df.drop(columns=["p90", "in90", "out90"])
 
     df["carrier"] = df["n_passes"] >= config.min_carrier_passes
     df["runner"] = (df["minutes"] >= config.min_runner_minutes) & (df["position_group"] != "GK")
+    df["defender"] = df["runner"]  # same minimum; experimental
     grades = {  # grade: (column, role, higher is better)
         "carrier_use": ("exploit_rate_shrunk", "carrier", True),
         "carrier_choice": ("likely_gap_shrunk", "carrier", False),
-        "runner_space": ("space_held_per90_shrunk", "runner", True),
-        "runner_receptions": ("receptions_per90_shrunk", "runner", True),
+        "runner_space": ("space_held_per90_poss_shrunk", "runner", True),
+        "runner_receptions": ("receptions_per90_poss_shrunk", "runner", True),
+        "defender_space": ("conceded_per90_def_shrunk", "defender", False),
     }
     for grade, (col, role, higher) in grades.items():
         out = pd.Series(np.nan, index=df.index)

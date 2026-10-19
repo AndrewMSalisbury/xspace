@@ -4,7 +4,8 @@ Built from the action file (`build_actions`), whose `owner_id` / `best_owner_id`
 attacker with the largest pitch-control share at the chosen and at the best cell.
 
 - `team_side`, `player_id`, `position`, `minutes`: from tracking; minutes on the pitch while
-  the ball was live.
+  the ball was live. `minutes_in_possession` / `minutes_out_of_possession`: the part of those
+  with the player's own team / the opponent in possession (needs the phase labels).
 - `n_actions`, `n_exploited`, `n_missed`, `xt_gained`, `decision_gap`, `likely_gap`: the
   player's own passes, crosses and carries.
 - `n_received_space`, `xspace_received`: completed actions into a cell this player owned
@@ -15,6 +16,9 @@ attacker with the largest pitch-control share at the chosen and at the best cell
 - `n_likely_space`, `n_likely_found`: the same for the *likely* best cell (weighted by the
   distance prior, likely ≥ `min_likely`), which doesn't credit far-touchline space nobody
   passes to. Phase 5 rates space held on these.
+- `n_likely_conceded`, `likely_conceded`, `n_likely_conceded_found`: opponents' actions whose
+  likely cell (≥ `min_likely`) this player, as the outfield defender quickest to it, was
+  responsible for; the sum of its xSpace; how often the ball went there. Experimental.
 
 Credit is a count of moments, not a model of the run that made the space; the counterfactual
 version ("freeze the runner, recompute") is a v2 idea in docs/PLAN.md.
@@ -27,6 +31,7 @@ import pandas as pd
 
 from xspace.config import DEFAULT_EXPLOITATION
 from xspace.io.loaders import MatchTracking
+from xspace.phases.possession import PhaseLabels
 
 MIN_BEST = DEFAULT_EXPLOITATION.exploit_min  # a best cell worth crediting (≈ median frame's best)
 # The likely cell is worth less (it trades value for distance): its median over actions is
@@ -34,22 +39,30 @@ MIN_BEST = DEFAULT_EXPLOITATION.exploit_min  # a best cell worth crediting (≈ 
 MIN_LIKELY = 0.003
 
 
-def minutes_played(match: MatchTracking) -> pd.DataFrame:
-    """Minutes each rostered player had a position, counting only live-ball frames."""
+def minutes_played(match: MatchTracking, phases: PhaseLabels | None = None) -> pd.DataFrame:
+    """Minutes each rostered player had a position, counting only live-ball frames; with
+    `phases`, also split by which team had possession."""
     rows = []
     for side, team, pos in ((0, match.home, match.home_pos), (1, match.away, match.away_pos)):
-        frames = (~np.isnan(pos[:, :, 0])).sum(axis=0)
-        rows.append(pd.DataFrame({
+        present = ~np.isnan(pos[:, :, 0])
+        row = {
             "team_side": np.int8(side), "player_id": pd.array(team.player_ids, dtype="string"),
-            "position": team.positions, "minutes": frames / match.frame_rate / 60,
-        }))
+            "position": team.positions,
+            "minutes": present.sum(axis=0) / match.frame_rate / 60,
+        }
+        if phases is not None:
+            for name, who in (("in", side), ("out_of", 1 - side)):
+                frames = present & (phases.possession_side == who)[:, None]
+                row[f"minutes_{name}_possession"] = frames.sum(axis=0) / match.frame_rate / 60
+        rows.append(pd.DataFrame(row))
     return pd.concat(rows, ignore_index=True)
 
 
 def build_players(match: MatchTracking, actions: pd.DataFrame,
-                  min_best: float = MIN_BEST, min_likely: float = MIN_LIKELY) -> pd.DataFrame:
+                  phases: PhaseLabels | None = None, min_best: float = MIN_BEST,
+                  min_likely: float = MIN_LIKELY) -> pd.DataFrame:
     """One row per player who was on the pitch."""
-    df = minutes_played(match).set_index(["team_side", "player_id"])
+    df = minutes_played(match, phases).set_index(["team_side", "player_id"])
     df = df[df["minutes"] > 0]
     act = actions[actions["status"] == "ok"]
     completed = act["success"].fillna(False).astype(bool)
@@ -74,9 +87,17 @@ def build_players(match: MatchTracking, actions: pd.DataFrame,
     big = act[(act["likely"] >= min_likely) & (act["likely_owner_id"] != act["player_id"])]
     g = by(big.assign(found=big["owner_id"] == big["likely_owner_id"]), "likely_owner_id")
     likely = pd.DataFrame({"n_likely_space": g.size(), "n_likely_found": g["found"].sum()})
+    # The same moments from the defending side: the defender quickest to the likely cell.
+    big = act[(act["likely"] >= min_likely) & act["likely_defender_id"].notna()]
+    big = big.assign(team_side=(1 - big["team_side"]).astype(np.int8),
+                     found=big["owner_id"] == big["likely_owner_id"])
+    g = by(big, "likely_defender_id")
+    conceded = pd.DataFrame({"n_likely_conceded": g.size(), "likely_conceded": g["likely"].sum(),
+                             "n_likely_conceded_found": g["found"].sum()})
 
-    df = df.join(own).join(received).join(space).join(likely)
+    df = df.join(own).join(received).join(space).join(likely).join(conceded)
     counts = [c for c in df.columns if c.startswith("n_")]
     df[counts] = df[counts].fillna(0).astype(np.int32)
-    df[["xt_gained", "xspace_received"]] = df[["xt_gained", "xspace_received"]].fillna(0.0)
+    sums = ["xt_gained", "xspace_received", "likely_conceded"]
+    df[sums] = df[sums].fillna(0.0)
     return df.reset_index()
