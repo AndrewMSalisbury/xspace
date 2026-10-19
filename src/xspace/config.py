@@ -64,6 +64,9 @@ class PhysicsParams:
     # no pitch control (level is onside; the margin absorbs ~0.5 m tracking noise).
     # Set to float('inf') to switch offside off.
     offside_margin: float = 0.5  # m
+    # Value surface (value/xt.py VALUE_MODELS). Not physics, but it travels with the physics to
+    # every worker. Settings hashes leave the name out and hash the grid file instead.
+    value_model: str = "singh_12x8"
 
 
 DEFAULT_PARAMS = PhysicsParams()
@@ -127,7 +130,7 @@ def settings_dict(physics: PhysicsParams = DEFAULT_PARAMS,
     from xspace.phases import possession, quality
     from xspace.value import xt
 
-    xt_grid = (Path(xt.__file__).parent / "xt_12x8.json").read_bytes()
+    xt_grid = xt.grid_bytes(physics.value_model)
     extra = {}
     if exploitation is not None:
         refine = inspect.signature(sync.refine_release_frames).parameters
@@ -138,7 +141,7 @@ def settings_dict(physics: PhysicsParams = DEFAULT_PARAMS,
                                if v.default is not inspect.Parameter.empty},
         }
     return {
-        "physics": asdict(physics),
+        "physics": {k: v for k, v in asdict(physics).items() if k != "value_model"},
         "timeline": {k: v for k, v in asdict(timeline).items() if k != "chunk_size"},
         "phases": {
             "setpiece_window_s": possession.SETPIECE_WINDOW_S,

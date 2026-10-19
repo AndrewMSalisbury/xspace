@@ -4,6 +4,7 @@ whatever physics those were built with).
 
     uv run python scripts/validate.py            # calibrated physics
     uv run python scripts/validate.py --default  # config.py physics
+    uv run python scripts/validate.py --value-model own_24x16  # ablations with another xT grid
 
 Uses the same match split as the calibration (calibration.json): models are fitted on the PFF
 training matches and scored on the PFF test matches and on all IDSSE matches (another
@@ -20,7 +21,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from xspace.config import POSSESSIONS_DIR, VALIDATION_DIR
+from xspace.config import DEFAULT_PARAMS, POSSESSIONS_DIR, VALIDATION_DIR
 from xspace.metrics.timeline import read_metadata
 from xspace.validation.passes import TRAJECTORIES, PassSet
 from xspace.validation.report import v1_scores, v3_scores, v4_split_half
@@ -34,8 +35,12 @@ def load(ab_dir, kind: str) -> pd.DataFrame:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--default", action="store_true", help="ablations built with --default")
+    ap.add_argument("--value-model", default=DEFAULT_PARAMS.value_model,
+                    help="ablations built with --value-model")
     args = ap.parse_args()
     tag = "_default" if args.default else ""
+    if args.value_model != DEFAULT_PARAMS.value_model:
+        tag += f"_{args.value_model}"
     ab_dir = VALIDATION_DIR / f"ablations{tag}"
     cal = json.loads((VALIDATION_DIR / "calibration.json").read_text())
     train_ids, test_ids = set(cal["train_matches"]), set(cal["test_matches"])

@@ -41,7 +41,7 @@ from xspace.metrics.possessions import BOX_DEPTH, BOX_HALF_WIDTH
 from xspace.metrics.space import FrameSpace, orient, space_from_arrays
 from xspace.metrics.timeline import _grid
 from xspace.phases.possession import PhaseLabels
-from xspace.value.xt import xt_value
+from xspace.value.xt import DEFAULT_VALUE_MODEL, xt_value
 
 SURFACES = ("value", "control", "control_value", "xspace", "xspace_lofted", "pass_prob")
 BETAS = (0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0)
@@ -157,10 +157,11 @@ def danger_labels(match: MatchTracking, events: pd.DataFrame, phases: PhaseLabel
 
 
 def frame_rows(match: MatchTracking, frames: np.ndarray, side: np.ndarray,
-               results: dict[str, np.ndarray]) -> pd.DataFrame:
+               results: dict[str, np.ndarray],
+               value_model: str = DEFAULT_VALUE_MODEL) -> pd.DataFrame:
     ball = np.where(side[:, None] == 1, -match.ball[frames], match.ball[frames])
     df = pd.DataFrame({"frame": frames, "team_side": side, "ball_x": ball[:, 0],
-                       "ball_y": ball[:, 1], "ball_xt": xt_value(ball),
+                       "ball_y": ball[:, 1], "ball_xt": xt_value(ball, value_model),
                        "air_share": results["air_share"]})
     for s in SURFACES:
         df[f"total_{s}"] = results[f"total_{s}"]
