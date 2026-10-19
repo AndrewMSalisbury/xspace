@@ -2,30 +2,40 @@
 
 Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 [docs/methodology.md](docs/methodology.md) (how everything is computed) and
-[docs/validation.md](docs/validation.md) (Phase 4 results).
+[docs/validation.md](docs/validation.md) (Phase 4 and V5 results).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Branches | PRs #1–#6 merged (#6 on 2026-10-18). Phase 5 on `phase5-ratings` (local, not pushed yet). |
-| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ · **5 in progress** |
-| Tests | 73 passing (`pytest`, ~8 s), ruff clean |
-| Data | 71 matches; actions rebuilt with the likely cell, possessions / players with the new thresholds; ratings in `data/processed/ratings/` |
+| Branches | PRs #1–#6 merged (#6 on 2026-10-18). Phase 5 on `phase5-ratings`, PR #7. Phase 6 branches from `main` once it merges. |
+| Phase | 0–2 ✅ · 3 ✅ (video eye test *assumed* passed, not recorded) · 4 ✅ · 5 ✅ pending Andrew's leaderboard eye test · **6 next** |
+| Tests | 74 passing (`pytest`, ~5 s), ruff clean |
+| Data | 71 matches; actions (likely cell, responsible defender), possessions, players rebuilt at `ba096a4`; ratings in `data/processed/ratings/` |
 
-## What Phase 5 has so far (methodology.md section 12)
+## What Phase 5 did (methodology.md section 12, validation.md V5)
 
-- **Likely best cell** on every action: xSpace × `exp(−d / 10 m)` (V1 prior). Edge-row best
-  cells 27% → 0.7%. `likely_gap` and space held (`n_likely_space`, threshold 0.003) use it.
-  The players' thresholds are now in the possession settings hash.
-- **`metrics/ratings.py`, `scripts/build_ratings.py`** (~10 s): team-match ratings (attack /
-  defence, 80% possession-bootstrap intervals, 5 grades, summary line), team profiles, leak
-  maps, player ratings (carriers, runners; empirical-Bayes shrinkage towards position means).
-- **Player directory** (`io.lineups.player_directory`): PFF rosters fix 153 `UNK` starters;
-  cached in `ratings/directory.parquet`.
-- **First checks**: Spain concede least, Costa Rica most; team xSpace created / conceded vs
-  shots per possession r = 0.56 / 0.45 (32 teams); space created follows possession share
-  (0.50). Runners: ST > AM > W > CM > FB > CB; within-position split-half 0.74.
+- **Likely best cell** on every action: xSpace × `exp(−d / 10 m)` (the V1 prior). Edge-row
+  best cells fall from 27% to 0.7%. `likely_gap` and space held (`n_likely_space`, ≥ 0.003)
+  use it. `likely_defender_id` is the outfield defender quickest to that cell.
+- **Players** get minutes in / out of possession. Runners are graded per 90 *in possession*,
+  and defenders (experimental) per 90 out of possession.
+- **`metrics/ratings.py`, `scripts/build_ratings.py`** (~10 s):
+  - team-match ratings: attack / defence, 80% possession-bootstrap intervals, 5 grades and a
+    summary line;
+  - team profiles and leak maps;
+  - player ratings: carriers, runners, defenders, with empirical-Bayes shrinkage towards
+    position means.
+- **Player directory** (`io.lineups.player_directory`): the PFF rosters fix 153 `UNK`
+  starters. Cached in `ratings/directory.parquet`.
+- **`validation/pff_grades.py`**: PFF analysts' event grades and "better option" flags.
+- **`notebooks/ratings.ipynb`**: leaderboards, sanity checks, PFF benchmark, V5.
+- **V5 results**:
+  - team ratings track shots for and against (ρ 0.38–0.66 over 32 teams);
+  - player ratings don't agree with PFF grades (|ρ| ≤ 0.16 within position);
+  - the likely gap doesn't separate PFF's better-option flags (AUC 0.50);
+  - deep blocks concede *more* value-weighted space behind (the low-block check fails as
+    posed).
 
 ## What Phase 4 changed
 
@@ -49,6 +59,10 @@ Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
   New scripts: `build_pass_set`, `calibrate`, `fit_joint`, `build_ablations`, `validate`.
 
 ## Things learned the hard way
+
+- **Up-to-date checks compare settings, not code.** A code change to a build (e.g. a new
+  action column) needs `--force`. A threshold change in `config.py` / `players.py` triggers
+  rebuilds by itself.
 
 - **Fitting completion only on attempted passes** can't see lanes nobody tried. Unbounded, the
   fit runs away to an instant ball, so it needs bounds (`calibrate.BOUNDS`).
@@ -100,12 +114,13 @@ Last updated: 2026-10-18. Read with [docs/PLAN.md](docs/PLAN.md) (the roadmap),
 
 ## Next steps
 
-1. Phase 5, remaining:
-   - leaderboard notebook with sanity checks (low-block teams and space behind; summaries
-     read right);
-   - PFF grade benchmark for players (event `grades`, `passerGrade`, ...);
-   - V5 write-up (ratings vs results) in validation.md;
-   - defender rating (experimental);
-   - decide whether space held should be normalised by team possession (Spain's players lead).
+1. Merge PR #7 (Phase 5) after Andrew's eye test of `notebooks/ratings.ipynb` (PLAN's
+   definition of done: leaderboards pass an expert eye test).
 2. Andrew: the video eye test (open issue 6).
-3. Deferred: a heat map of all space conceded needs per-cell sums in the timeline (rebuild).
+3. Phase 5 follow-ups, if wanted:
+   - a relative decision gap: the absolute one penalises carriers in rich areas;
+   - an area-only "behind", to test the low-block hypothesis (validation.md V5);
+   - a heat map of all space conceded: needs per-cell sums in the timeline (rebuild); the
+     leak map stands in.
+4. Phase 6 (own value model). It also revisits V3 (danger) and may help the player ratings,
+   which have no outside support yet.

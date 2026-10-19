@@ -512,8 +512,12 @@ the players (410 carriers, 319 runners), with intervals, shrinkage and grades
 ([methodology.md](methodology.md) section 12). Changes from the plan above: ratings use the
 *likely* best cell (distance-weighted) for decision gaps and space held; the runner minimum is
 110 live minutes (≈ 180 match minutes); the space-conceded heat map is a leak map of
-opponents' likely options, since the timeline keeps no per-cell surfaces. Still to do: the
-leaderboard notebook and its sanity checks, the PFF grade benchmark, the defender rating.
+opponents' likely options, since the timeline keeps no per-cell surfaces; runners are graded
+per 90 in possession; the defender rating uses the defender quickest to the likely cell.
+`notebooks/ratings.ipynb` has the leaderboards and checks, and V5 is in validation.md: team
+ratings track shots for and against (ρ 0.38–0.66, 32 teams); player ratings don't agree with
+PFF's grades; the low-block check fails as posed (deep blocks concede more *valuable* space
+behind). The expert eye test of the leaderboards is Andrew's.
 
 ### Definition of done
 

@@ -410,12 +410,25 @@ CM / AM / W / ST by the position played most.
 | Role | Qualifies | Metrics (raw and `_shrunk`) |
 |---|---|---|
 | Ball carrier | ≥ 50 open-play passes + crosses | exploitation rate, mean likely gap, missed per 90 |
-| Runner | ≥ 110 live minutes (≈ 180 match minutes), not GK | space held per 90 (likely cell), high-xSpace receptions per 90 |
+| Runner | ≥ 110 live minutes (≈ 180 match minutes), not GK | space held (likely cell), high-xSpace receptions: per 90 and **per 90 in possession** (graded) |
+| Defender (experimental) | as runners | opponents' likely cells they were responsible for, per 90 out of possession (lower is better) |
+
+Runners are graded per 90 minutes *their team had the ball* (from the phase labels), because
+possession sides give their players more moments: Spain's players led the raw per-90 table.
+The flip side is that players of low-possession teams (Japan, Saudi Arabia) rise. The
+**responsible defender** at each action is the outfield defender who could reach the likely
+cell first (time to intercept, `likely_defender_id`): a zone of responsibility drawn by speed,
+not by tactics.
 
 Shrinkage is towards the position's mean: beta-binomial for rates, gamma-Poisson for per-90
 counts, normal-normal for mean gaps (priors fitted per position with ≥ 10 players, otherwise on
 everyone). Grades are percentiles among qualified players of the same position, if ≥ 5 qualify.
-The defender rating in PLAN (space conceded in a zone of responsibility) is not built yet.
+
+**Caveats** (details in [validation.md](validation.md) V5). Player ratings don't agree with
+PFF analysts' grades, and the likely gap doesn't separate PFF's "better option" flags, so they
+describe space, not quality. The carrier "choice" grade (likely gap, absolute) runs against the
+"use" grade: players in rich areas face bigger gaps (Sané: use 99, choice 6); a relative gap
+would fix that. "Space behind" is value-weighted, so deep blocks concede *more* of it.
 
 ### First results (all 71 matches)
 
@@ -467,8 +480,8 @@ The defender rating in PLAN (space conceded in a zone of responsibility) is not 
    physics fitted to pass outcomes. V5 (ratings vs results) follows the ratings. The old,
    heavier lane blocking predicted danger (V3) better; kept as a known trade-off, to revisit
    with the own value model.
-4. ~~**Ratings**~~ — first version done (section 12). Next: leaderboard notebook, PFF grade
-   benchmark, defender rating.
+4. ~~**Ratings**~~ — done (section 12; V5 in validation.md). Open: a relative decision gap, an
+   area-only "behind", outside validation of player ratings.
 5. **PFF 2022 World Cup** — scale to 64 matches / 32 teams.
 6. **Own value model** — replace borrowed xT with a possession-value model fit on this data.
 7. **Web app** — match scrubber, team and player pages.

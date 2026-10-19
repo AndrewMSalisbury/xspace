@@ -24,7 +24,7 @@ broadcast tracking, another event provider).
 | V2 | Does reachability predict pass *success*? (and calibration) | [Done](#v2-pass-success-and-calibration) |
 | V3 | Does xSpace now predict danger in the next 10 s? | [Done, with a known trade-off](#decision-keep-the-calibrated-physics): old physics predicts it better |
 | V4 | Is the team signal stable? | [Done](#v4-is-the-team-signal-stable) |
-| V5 | Do ratings relate to results? | After Phase 5 (ratings) |
+| V5 | Do ratings relate to results? | [Done](#v5-do-ratings-relate-to-results-phase-5): teams yes, players unvalidated |
 
 ## V2: pass success and calibration
 
@@ -301,6 +301,60 @@ xSpace and peak xSpace, and pool exploitation over more matches or shrink it tow
 (Split-half reliability measures noise, not meaning: a stable metric could still be stable for
 the wrong reason, e.g. tracking quality per stadium. V3 and V5 are the checks on meaning.)
 
+## V5: do ratings relate to results? (Phase 5)
+
+From `notebooks/ratings.ipynb`, on the ratings of `scripts/build_ratings.py`
+([methodology.md](methodology.md) section 12). Nothing here was fitted, so there is no split.
+
+**Teams (32 World Cup teams, pooled over matches; Spearman).** The team-level numbers track
+results per possession:
+
+| Rating | Against | ρ | p |
+|---|---|---|---|
+| xSpace created | shots per possession | 0.47 | 0.006 |
+| exploitation rate (shrunk) | shots per possession | 0.39 | 0.03 |
+| xSpace conceded | shots conceded per possession | 0.38 | 0.03 |
+| xSpace conceded behind | shots conceded per possession | 0.41 | 0.02 |
+| opponents' exploitation rate (shrunk) | shots conceded per possession | **0.66** | < 0.001 |
+| xSpace conceded | goal difference per match | −0.33 | 0.06 |
+| xSpace created | goal difference per match | 0.13 | 0.47 |
+
+**Team-matches (142; Spearman with the grades, higher = better for the team).** Weaker, as
+one match is noisy: space created 0.20 with shots per possession and 0.39 with box entries per
+possession; the shrunk exploitation rate 0.34 with shots; opponents' use −0.34 with shots
+conceded. Nothing relates to the match's goal difference beyond ±0.14. Space created and
+conceded both follow possession share (±0.50): dominant teams find more space and leave less.
+
+**Low blocks: the sanity check fails as posed.** PLAN expected teams that defend deep to concede
+little space *behind*. With the opponent's ball in the middle third, a deeper back line goes
+with *more* xSpace behind (ρ = −0.42 between line height and space behind, p = 0.02; Costa Rica
+defend deepest, 31.8 m from goal, and concede most) and much more in front (ρ = −0.87).
+Hypothesis, not tested: behind a deep line there is less room but it is close to goal, where xT
+is high, so the value-weighted total rises; an area-only version of "behind" would separate the
+two. Until then, "space behind" in the ratings means valuable space behind, not depth.
+
+**PFF analysts' grades: no agreement.** PFF grades every player's role in every event (0 = as
+expected, ±0.5 steps; `validation/pff_grades.py`). Ranked within position among qualified
+players: carriers' shrunk exploitation rate and likely gap vs PFF passing grade ρ = 0.02 / 0.05
+(383 players); runners' space held and receptions per 90 in possession vs PFF receiving grades
+per 90 ρ = −0.13 / −0.16 (307); defenders' likely cells conceded vs PFF defending grades
+−0.02 / −0.04. PFF's grades judge the *execution* of what a player did (a first touch, a pass
+on target) against expectation; ours count *where* space was. That they don't agree is no
+evidence for either, but it means the player ratings have no outside support yet.
+
+**PFF "better option" flags.** Analysts flagged 326 of 60,285 computed PFF actions as having a
+better option. The likely gap doesn't separate them (median 0.0018 flagged vs 0.0019, AUC
+0.50; raw decision gap 0.47). `missed` does, weakly: 3.7% of flagged actions against 1.9%. When
+PFF names the better player (239 times), it is the owner of our likely cell 22% of the time
+(16% for the raw best cell). Our "better option" is the most valuable reachable space; theirs
+includes holding, crossing and safer passes, so overlap was always going to be partial, but
+the likely gap is not a measure of decision quality as PFF sees it.
+
+**Verdict.** Team ratings mean something: they are stable (V4) and track shots for and against
+over a tournament. Single-match grades are noisy and should be shown with their intervals.
+Player ratings are plausible by position and stable (split-half within position 0.74) but
+unvalidated against any outside judgement; present them as descriptions of space, not quality.
+
 ## Summary against the plan
 
 The plan's definition of done: the full model beats every ablation on held-out matches for
@@ -316,3 +370,5 @@ V1–V3, and anything that doesn't is reported with a hypothesis.
   entries. The Phases 0–3 physics predicts danger better everywhere. That is accepted for now
   ([decision](#decision-keep-the-calibrated-physics)) and revisited in Phase 6.
 - **V4:** done. Team xSpace is stable; the exploitation rate is too noisy per team.
+- **V5:** done. Team ratings track shots for and against (ρ 0.38–0.66 over 32 teams);
+  player ratings don't agree with PFF's grades, and the low-block check fails as posed.
