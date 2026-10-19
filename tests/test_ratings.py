@@ -213,7 +213,7 @@ def test_team_profiles_and_leak_map():
 def test_player_ratings():
     poss, acts, players, directory = tournament()
     cfg = RatingsConfig(n_boot=10, min_carrier_passes=5, min_runner_minutes=100,
-                        min_group_size=2)
+                        min_group_size=2, min_graded=2)
     df = player_ratings(players, acts, directory, cfg).set_index("player_id")
     a0 = df.loc["Alpha0"]  # GK, played all three of Alpha's matches
     assert a0["matches"] == 3 and a0["position_group"] == "GK" and a0["minutes"] == 180
@@ -223,6 +223,10 @@ def test_player_ratings():
     st = df[df["position_group"] == "ST"]
     assert st["grade_runner_space"].notna().all()
     assert df.loc[df["carrier"], "grade_carrier_use"].between(0, 100).all()
+    # Too few qualified players in a position: no grades.
+    few = player_ratings(players, acts, directory, RatingsConfig(
+        n_boot=10, min_carrier_passes=5, min_runner_minutes=100, min_graded=10))
+    assert few["grade_runner_space"].isna().all()
     # A reception counts only for team-mates' completed actions into the player's cell.
     rec = acts[acts["success"].fillna(False).astype(bool) & (acts["chosen"] >= cfg.high_xspace)
                & (acts["owner_id"] != acts["player_id"])]

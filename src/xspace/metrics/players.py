@@ -13,8 +13,8 @@ attacker with the largest pitch-control share at the chosen and at the best cell
   space occupied. `n_best_found`: of those, the ball went into this player's space.
   `n_best_ignored`: of those, the action was `missed`.
 - `n_likely_space`, `n_likely_found`: the same for the *likely* best cell (weighted by the
-  distance prior), which doesn't credit far-touchline space nobody passes to. Phase 5 rates
-  space held on these.
+  distance prior, likely ≥ `min_likely`), which doesn't credit far-touchline space nobody
+  passes to. Phase 5 rates space held on these.
 
 Credit is a count of moments, not a model of the run that made the space; the counterfactual
 version ("freeze the runner, recompute") is a v2 idea in docs/PLAN.md.
@@ -29,6 +29,9 @@ from xspace.config import DEFAULT_EXPLOITATION
 from xspace.io.loaders import MatchTracking
 
 MIN_BEST = DEFAULT_EXPLOITATION.exploit_min  # a best cell worth crediting (≈ median frame's best)
+# The likely cell is worth less (it trades value for distance): its median over actions is
+# 0.0027, where the best cell's is 0.011. The same meaning, "at least a median option":
+MIN_LIKELY = 0.003
 
 
 def minutes_played(match: MatchTracking) -> pd.DataFrame:
@@ -44,7 +47,7 @@ def minutes_played(match: MatchTracking) -> pd.DataFrame:
 
 
 def build_players(match: MatchTracking, actions: pd.DataFrame,
-                  min_best: float = MIN_BEST) -> pd.DataFrame:
+                  min_best: float = MIN_BEST, min_likely: float = MIN_LIKELY) -> pd.DataFrame:
     """One row per player who was on the pitch."""
     df = minutes_played(match).set_index(["team_side", "player_id"])
     df = df[df["minutes"] > 0]
@@ -68,7 +71,7 @@ def build_players(match: MatchTracking, actions: pd.DataFrame,
     g = by(big.assign(found=big["owner_id"] == big["best_owner_id"]), "best_owner_id")
     space = pd.DataFrame({"n_best_space": g.size(), "n_best_found": g["found"].sum(),
                           "n_best_ignored": g["missed"].sum()})
-    big = act[(act["likely"] >= min_best) & (act["likely_owner_id"] != act["player_id"])]
+    big = act[(act["likely"] >= min_likely) & (act["likely_owner_id"] != act["player_id"])]
     g = by(big.assign(found=big["owner_id"] == big["likely_owner_id"]), "likely_owner_id")
     likely = pd.DataFrame({"n_likely_space": g.size(), "n_likely_found": g["found"].sum()})
 

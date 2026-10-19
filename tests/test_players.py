@@ -18,7 +18,7 @@ def actions_for():
         "owner_id": pd.array(["h3", "h4", "h1", "h3"], dtype="string"),
         "best_owner_id": pd.array(["h3", "h3", "h3", "h3"], dtype="string"),
         # The likely cell moves the second action's credit from h3 (far touchline) to h4.
-        "likely": [0.03, 0.02, 0.003, 0.5], "likely_gap": [0.0, 0.02, 0.001, 0.0],
+        "likely": [0.03, 0.02, 0.002, 0.5], "likely_gap": [0.0, 0.02, 0.001, 0.0],
         "likely_owner_id": pd.array(["h3", "h4", "h3", "h3"], dtype="string"),
     })
 

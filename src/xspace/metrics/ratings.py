@@ -47,8 +47,10 @@ class RatingsConfig:
     interval: float = 0.8  # width of the intervals
     seed: int = 0
     min_carrier_passes: int = 50  # open-play passes + crosses to rate a ball carrier
-    min_runner_minutes: float = 180.0  # live minutes to rate a runner
+    # Live minutes to rate a runner: ≈ 180 match minutes (a match has about 55-60 live).
+    min_runner_minutes: float = 110.0
     min_group_size: int = 10  # players with exposure needed for a position's own prior
+    min_graded: int = 5  # qualified players a position needs before it gets grades
     high_xspace: float = DEFAULT_EXPLOITATION.exploit_min  # a reception worth counting
     leak_cells: tuple[int, int] = (12, 8)  # leak map grid (x, y), the xT grid's shape
 
@@ -487,7 +489,7 @@ def player_ratings(players: pd.DataFrame, act: pd.DataFrame, directory: pd.DataF
     space held per 90 (team-mates' actions whose likely best cell they owned) and high-xSpace
     receptions per 90 (team-mates' completed actions into their cell worth ≥ `high_xspace`).
     Each has a raw and a `_shrunk` value; grades are percentiles among qualified players of
-    the same position group, on shrunk values.
+    the same position group, on shrunk values (none if fewer than `min_graded` qualify).
     """
     keys = ["source", "team", "player_id"]
     pm = players.merge(directory, on=["source", "match_id", "player_id"], how="left",
@@ -546,6 +548,8 @@ def player_ratings(players: pd.DataFrame, act: pd.DataFrame, directory: pd.DataF
     for grade, (col, role, higher) in grades.items():
         out = pd.Series(np.nan, index=df.index)
         for _, idx in df[df[role]].groupby("position_group").groups.items():
+            if len(idx) < config.min_graded:
+                continue
             g = percentile(df.loc[idx, col])
             out[idx] = g if higher else 100 - g
         df[f"grade_{grade}"] = out
